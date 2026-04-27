@@ -32,6 +32,17 @@ public extension Font {
     /// 13pt Regular — caption, labels mici
     static let solCaption: Font = .system(size: 13, weight: .medium, design: .default)
 
+    // MARK: - Convenience aliases
+
+    /// Alias pentru solHeadingSM (17pt Semibold) — uzaj curent în views
+    static let solHeadline: Font = .system(size: 17, weight: .semibold, design: .default)
+    /// Alias pentru solBodyMD (15pt Regular)
+    static let solBody: Font = .system(size: 15, weight: .regular, design: .default)
+    /// 15pt Semibold — body cu accent
+    static let solBodyBold: Font = .system(size: 15, weight: .semibold, design: .default)
+    /// Alias pentru solMonoMD (15pt Mono)
+    static let solMono: Font = .system(size: 15, weight: .medium, design: .monospaced)
+
     // MARK: - Mono (sume inline)
 
     /// 13pt SF Mono Medium — sume afișate inline

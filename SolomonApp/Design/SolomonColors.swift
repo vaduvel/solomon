@@ -26,6 +26,13 @@ public extension Color {
     /// Text attenuat — #6B6B7A
     static let solTextMuted     = Color(hex: "#6B6B7A")
 
+    // MARK: - Convenience aliases
+
+    /// Alias pentru solTextPrimary
+    static let solText          = Color(hex: "#F5F5F7")
+    /// Alias pentru solTextMuted
+    static let solTextTertiary  = Color(hex: "#6B6B7A")
+
     // MARK: - Accent mint (brand)
 
     /// Accent principal — #3DDC97 (CTA, success, cifre cheie, toggles ON)

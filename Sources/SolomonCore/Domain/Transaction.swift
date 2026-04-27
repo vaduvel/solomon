@@ -14,6 +14,8 @@ public enum TransactionSource: String, Codable, Sendable, Hashable {
     case csvImport     = "csv_import"
     case manualEntry   = "manual_entry"
     case derivedFromObligation = "derived_from_obligation"
+    /// Tranzacție parsată din notificarea push a unei bănci (via iOS Shortcuts).
+    case notificationParsed = "notification_parsed"
 }
 
 /// O tranzacție financiară individuală — cărămida pe care toată analiza Solomon o folosește.
