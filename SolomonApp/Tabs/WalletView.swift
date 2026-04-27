@@ -13,6 +13,7 @@ struct WalletView: View {
     @State private var selectedSegment = 0
     @State private var showSubscriptionAudit = false
     @State private var showSuspiciousTransactions = false
+    @State private var showManualEntry = false
 
     var body: some View {
         NavigationStack {
@@ -39,11 +40,25 @@ struct WalletView: View {
             }
             .navigationTitle("Portofel")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showManualEntry = true
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundStyle(LinearGradient.solHero)
+                    }
+                }
+            }
             .sheet(isPresented: $showSubscriptionAudit, onDismiss: { Task { await vm.load() } }) {
                 SubscriptionAuditView()
             }
             .sheet(isPresented: $showSuspiciousTransactions, onDismiss: { Task { await vm.load() } }) {
                 SuspiciousTransactionsView()
+            }
+            .sheet(isPresented: $showManualEntry, onDismiss: { Task { await vm.load() } }) {
+                ManualTransactionView()
             }
         }
         .task {
