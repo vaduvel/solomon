@@ -11,6 +11,7 @@ struct SettingsView: View {
 
     @StateObject private var vm = SettingsViewModel()
     @State private var showShortcutSetup = false
+    @State private var showProfileEdit = false
     @State private var showDebugAlert: DebugAlertKind?
 
     enum DebugAlertKind: Identifiable {
@@ -62,6 +63,9 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.large)
             .sheet(isPresented: $showShortcutSetup) {
                 ShortcutSetupView()
+            }
+            .sheet(isPresented: $showProfileEdit) {
+                ProfileEditView()
             }
             .alert(item: $showDebugAlert) { kind in
                 switch kind {
@@ -163,7 +167,7 @@ struct SettingsView: View {
             .listRowSeparatorTint(Color.solBorder)
 
             settingsRow(icon: "person.fill", label: "Profil financiar", value: nil) {
-                // TODO: Navigate to profile editor
+                showProfileEdit = true
             }
 
             settingsRow(icon: "target", label: "Obiective", value: "1 activ") {
