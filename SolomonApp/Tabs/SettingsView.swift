@@ -1,4 +1,6 @@
 import SwiftUI
+import SolomonCore
+import SolomonStorage
 
 // MARK: - SettingsView (Tab 4 — Setări)
 //
@@ -9,6 +11,23 @@ struct SettingsView: View {
 
     @StateObject private var vm = SettingsViewModel()
     @State private var showShortcutSetup = false
+    @State private var showDebugAlert: DebugAlertKind?
+
+    enum DebugAlertKind: Identifiable {
+        case demoGenerated
+        case dataCleared
+        case onboardingReset
+        case error(String)
+
+        var id: String {
+            switch self {
+            case .demoGenerated: return "demo"
+            case .dataCleared: return "clear"
+            case .onboardingReset: return "onboarding"
+            case .error(let m): return "error:\(m)"
+            }
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -30,6 +49,11 @@ struct SettingsView: View {
 
                     // About
                     aboutSection
+
+                    // Debug (doar build Debug)
+                    #if DEBUG
+                    debugSection
+                    #endif
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
@@ -39,6 +63,75 @@ struct SettingsView: View {
             .sheet(isPresented: $showShortcutSetup) {
                 ShortcutSetupView()
             }
+            .alert(item: $showDebugAlert) { kind in
+                switch kind {
+                case .demoGenerated:
+                    return Alert(title: Text("✅ Demo data"),
+                                 message: Text("Am generat 6 luni de tranzacții, obligații și abonamente."))
+                case .dataCleared:
+                    return Alert(title: Text("🗑 Date șterse"),
+                                 message: Text("Toate tranzacțiile, obligațiile și abonamentele au fost șterse."))
+                case .onboardingReset:
+                    return Alert(title: Text("♻️ Onboarding resetat"),
+                                 message: Text("Repornește app-ul ca să intri în onboarding."))
+                case .error(let msg):
+                    return Alert(title: Text("⚠️ Eroare"), message: Text(msg))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var debugSection: some View {
+        Section {
+            settingsRow(icon: "wand.and.stars", label: "Generează demo data", value: "6 luni") {
+                runDemoGenerate()
+            }
+            settingsRow(icon: "trash", label: "Șterge toate datele", value: nil) {
+                runClearData()
+            }
+            settingsRow(icon: "arrow.counterclockwise", label: "Reset onboarding", value: nil) {
+                OnboardingState.resetForDebug()
+                showDebugAlert = .onboardingReset
+            }
+        } header: {
+            sectionHeader("DEBUG (DEV BUILD)")
+        }
+    }
+
+    private func runDemoGenerate() {
+        let ctx = SolomonPersistenceController.shared.container.viewContext
+        let txRepo = CoreDataTransactionRepository(context: ctx)
+        let oblRepo = CoreDataObligationRepository(context: ctx)
+        let subRepo = CoreDataSubscriptionRepository(context: ctx)
+        let userRepo = CoreDataUserProfileRepository(context: ctx)
+        do {
+            try DemoDataGenerator.populate(
+                transactionRepo: txRepo,
+                obligationRepo: oblRepo,
+                subscriptionRepo: subRepo,
+                userProfileRepo: userRepo
+            )
+            showDebugAlert = .demoGenerated
+        } catch {
+            showDebugAlert = .error(error.localizedDescription)
+        }
+    }
+
+    private func runClearData() {
+        let ctx = SolomonPersistenceController.shared.container.viewContext
+        let txRepo = CoreDataTransactionRepository(context: ctx)
+        let oblRepo = CoreDataObligationRepository(context: ctx)
+        let subRepo = CoreDataSubscriptionRepository(context: ctx)
+        do {
+            try DemoDataGenerator.clearAll(
+                transactionRepo: txRepo,
+                obligationRepo: oblRepo,
+                subscriptionRepo: subRepo
+            )
+            showDebugAlert = .dataCleared
+        } catch {
+            showDebugAlert = .error(error.localizedDescription)
         }
     }
 
