@@ -36,8 +36,8 @@ struct ContentView: View {
                 }
                 .tag(3)
         }
-        .tint(Color.solMint)
-        .toolbarBackground(Color.solSurface, for: .tabBar)
+        .tint(Color.solPrimary)
+        .toolbarBackground(Color.solCard, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
     }
 }

@@ -11,6 +11,8 @@ struct WalletView: View {
 
     @StateObject private var vm = WalletViewModel()
     @State private var selectedSegment = 0
+    @State private var showSubscriptionAudit = false
+    @State private var showSuspiciousTransactions = false
 
     var body: some View {
         NavigationStack {
@@ -37,6 +39,12 @@ struct WalletView: View {
             }
             .navigationTitle("Portofel")
             .navigationBarTitleDisplayMode(.large)
+            .sheet(isPresented: $showSubscriptionAudit, onDismiss: { Task { await vm.load() } }) {
+                SubscriptionAuditView()
+            }
+            .sheet(isPresented: $showSuspiciousTransactions, onDismiss: { Task { await vm.load() } }) {
+                SuspiciousTransactionsView()
+            }
         }
         .task {
             vm.configure(persistence: SolomonPersistenceController.shared)
@@ -148,6 +156,32 @@ struct WalletView: View {
                 emptyState(icon: "play.rectangle.fill", title: "Niciun abonament", subtitle: "Solomon le va detecta automat din email-uri.")
                     .padding(.horizontal, SolSpacing.screenHorizontal)
             } else {
+                if vm.ghostSavingsPotential > 0 {
+                    Button {
+                        showSubscriptionAudit = true
+                    } label: {
+                        HStack {
+                            IconContainer(systemName: "scissors", variant: .neon, size: 36, iconSize: 14)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Anulează abonamentele fantomă")
+                                    .font(.solBodyBold)
+                                    .foregroundStyle(Color.solForeground)
+                                Text("Economisești \(vm.ghostSavingsPotential) RON/lună")
+                                    .font(.solCaption)
+                                    .foregroundStyle(Color.solPrimary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14))
+                                .foregroundStyle(Color.solMuted)
+                        }
+                        .padding(SolSpacing.base)
+                        .solAIInsightCard()
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, SolSpacing.screenHorizontal)
+                }
+
                 VStack(spacing: SolSpacing.sm) {
                     ForEach(vm.subscriptions) { sub in
                         SubscriptionRow(subscription: sub)
@@ -165,6 +199,30 @@ struct WalletView: View {
                 emptyState(icon: "list.bullet.rectangle", title: "Nicio tranzacție", subtitle: "Conectează banca via Shortcuts sau adaugă manual.")
                     .padding(.horizontal, SolSpacing.screenHorizontal)
             } else {
+                Button {
+                    showSuspiciousTransactions = true
+                } label: {
+                    HStack {
+                        IconContainer(systemName: "exclamationmark.shield.fill", variant: .warn, size: 36, iconSize: 14)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Verifică tranzacțiile suspecte")
+                                .font(.solBodyBold)
+                                .foregroundStyle(Color.solForeground)
+                            Text("Solomon detectează automat sume mari, burst-uri și plăți de noapte.")
+                                .font(.solCaption)
+                                .foregroundStyle(Color.solMuted)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.solMuted)
+                    }
+                    .padding(SolSpacing.base)
+                    .solCard()
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, SolSpacing.screenHorizontal)
+
                 VStack(spacing: SolSpacing.sm) {
                     ForEach(vm.transactions) { tx in
                         TransactionRow(transaction: tx)

@@ -12,6 +12,7 @@ struct SettingsView: View {
     @StateObject private var vm = SettingsViewModel()
     @State private var showShortcutSetup = false
     @State private var showProfileEdit = false
+    @State private var showGoalsList = false
     @State private var showDebugAlert: DebugAlertKind?
 
     enum DebugAlertKind: Identifiable {
@@ -66,6 +67,9 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showProfileEdit) {
                 ProfileEditView()
+            }
+            .sheet(isPresented: $showGoalsList) {
+                GoalsListView()
             }
             .alert(item: $showDebugAlert) { kind in
                 switch kind {
@@ -170,8 +174,8 @@ struct SettingsView: View {
                 showProfileEdit = true
             }
 
-            settingsRow(icon: "target", label: "Obiective", value: "1 activ") {
-                // TODO: Navigate to goals
+            settingsRow(icon: "target", label: "Obiective", value: nil) {
+                showGoalsList = true
             }
         } header: {
             sectionHeader("PROFIL")
