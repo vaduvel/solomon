@@ -181,10 +181,7 @@ struct ShortcutSetupView: View {
                         .clipShape(RoundedRectangle(cornerRadius: SolRadius.sm))
                 }
 
-                Button(action: openShortcutsApp) {
-                    Label("Deschide Shortcuts", systemImage: "app.shortcut")
-                }
-                .buttonStyle(SolomonButtonStyle(variant: .primary))
+                SolomonButton("Deschide Shortcuts", action: openShortcutsApp)
             }
             .padding(SolSpacing.md)
             .solCard()
@@ -278,15 +275,15 @@ struct ShortcutSetupView: View {
             ),
             (
                 "Trigger: Notificare",
-                "Selectează „Notificare" → Aplicație: \(bankName) → Apasă OK"
+                "Selectează «Notificare» → Aplicație: \(bankName) → Apasă OK"
             ),
             (
                 "Acțiune: Deschide URL",
-                "Adaugă acțiunea „Deschide URL" → URL: solomon://transaction?raw=[Conținut notificare]"
+                "Adaugă acțiunea «Deschide URL» → URL: solomon://transaction?raw=[Conținut notificare]"
             ),
             (
                 "Dezactivează confirmarea",
-                "Dezactivează „Întreabă înainte de a rula" → Salvează"
+                "Dezactivează «Întreabă înainte de a rula» → Salvează"
             ),
             (
                 "Testează",

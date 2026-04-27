@@ -1,4 +1,5 @@
 import SwiftUI
+import SolomonCore
 
 // MARK: - TodayView (Tab 1 — Azi)
 //
@@ -13,6 +14,11 @@ struct TodayView: View {
     // MARK: - View Model
 
     @StateObject private var vm = TodayViewModel()
+
+    // MARK: - Notification ingestion (live transactions from Shortcuts)
+
+    @ObservedObject private var ingestion = NotificationIngestionService.shared
+    @State private var showManualEntry = false
 
     // MARK: - Body
 
@@ -51,6 +57,9 @@ struct TodayView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    addManualButton
+                }
                 ToolbarItem(placement: .principal) {
                     solomonWordmark
                 }
@@ -58,8 +67,23 @@ struct TodayView: View {
                     notificationButton
                 }
             }
+            .ingestionToast(transaction: ingestionBinding)
+            .sheet(isPresented: $showManualEntry) {
+                ManualTransactionView()
+            }
         }
         .task { await vm.load() }
+    }
+
+    // MARK: - Ingestion binding (read service, write clears it)
+
+    private var ingestionBinding: Binding<SolomonCore.Transaction?> {
+        Binding(
+            get: { ingestion.lastIngested },
+            set: { newValue in
+                if newValue == nil { ingestion.clearLastIngested() }
+            }
+        )
     }
 
     // MARK: - Sub-views
@@ -130,6 +154,17 @@ struct TodayView: View {
             Image(systemName: vm.hasUnreadAlert ? "bell.badge.fill" : "bell")
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(vm.hasUnreadAlert ? Color.solMint : Color.solTextSecondary)
+        }
+    }
+
+    @ViewBuilder
+    private var addManualButton: some View {
+        Button {
+            showManualEntry = true
+        } label: {
+            Image(systemName: "plus.circle")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(Color.solTextSecondary)
         }
     }
 

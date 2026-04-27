@@ -55,6 +55,16 @@ public final class NotificationIngestionService: ObservableObject {
         self.repository = repository
     }
 
+    /// Șterge ultima ingestie din state — folosit de toast-ul UI după auto-dismiss.
+    public func clearLastIngested() {
+        lastIngested = nil
+    }
+
+    /// Reset eroare după ce UI-ul a afișat-o.
+    public func clearError() {
+        lastError = nil
+    }
+
     // MARK: - URL Handling
 
     /// Procesează un URL de tip `solomon://transaction?raw=...`.

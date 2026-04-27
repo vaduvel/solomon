@@ -8,6 +8,7 @@ import SwiftUI
 struct SettingsView: View {
 
     @StateObject private var vm = SettingsViewModel()
+    @State private var showShortcutSetup = false
 
     var body: some View {
         NavigationStack {
@@ -35,6 +36,9 @@ struct SettingsView: View {
             }
             .navigationTitle("Setări")
             .navigationBarTitleDisplayMode(.large)
+            .sheet(isPresented: $showShortcutSetup) {
+                ShortcutSetupView()
+            }
         }
     }
 
@@ -80,6 +84,34 @@ struct SettingsView: View {
     @ViewBuilder
     private var connectionsSection: some View {
         Section {
+            // Hero row — conectează banca via Shortcuts
+            Button(action: { showShortcutSetup = true }) {
+                HStack(spacing: SolSpacing.md) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: SolRadius.sm, style: .continuous)
+                            .fill(Color.solMint.opacity(0.15))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: "app.badge")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(Color.solMint)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Conectează banca")
+                            .font(.solBodyMD)
+                            .foregroundStyle(Color.solTextPrimary)
+                        Text(vm.connectedBanksLabel)
+                            .font(.solCaption)
+                            .foregroundStyle(Color.solMint)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.solTextMuted)
+                }
+            }
+            .listRowBackground(Color.solSurface)
+            .listRowSeparatorTint(Color.solBorder)
+
             settingsToggleRow(
                 icon: "envelope.fill",
                 iconColor: .solInfo,
@@ -233,6 +265,17 @@ final class SettingsViewModel: ObservableObject {
     @Published var notificationsEnabled = true
     @Published var calendarEnabled = false
     @Published var trainingOptIn = false
+    @Published var connectedBanks: [String] = []   // populat după setup Shortcuts
+
+    var connectedBanksLabel: String {
+        if connectedBanks.isEmpty {
+            return "Setup în Shortcuts"
+        } else if connectedBanks.count == 1 {
+            return connectedBanks[0]
+        } else {
+            return "\(connectedBanks.count) bănci conectate"
+        }
+    }
 }
 
 // MARK: - Preview

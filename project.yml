@@ -52,6 +52,11 @@ targets:
           - "**/*.md"
     info:
       path: SolomonApp/Info.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleURLName: ro.solomon.app.urlscheme
+            CFBundleURLSchemes:
+              - solomon
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ro.solomon.app

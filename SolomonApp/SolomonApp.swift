@@ -12,7 +12,7 @@ struct SolomonApp: App {
 
     // MARK: - Dependencies
 
-    private let persistence = PersistenceController.shared
+    private let persistence = SolomonPersistenceController.shared
 
     // MARK: - Init
 
