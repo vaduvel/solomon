@@ -1,0 +1,242 @@
+import SwiftUI
+
+// MARK: - SettingsView (Tab 4 — Setări)
+//
+// Profil user, permisiuni, abonament, about.
+// Faza 10: layout complet cu date mock.
+
+struct SettingsView: View {
+
+    @StateObject private var vm = SettingsViewModel()
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.solCanvas.ignoresSafeArea()
+
+                List {
+                    // Profil
+                    profileSection
+
+                    // Conectări
+                    connectionsSection
+
+                    // Notificări
+                    notificationsSection
+
+                    // Abonament
+                    subscriptionSection
+
+                    // About
+                    aboutSection
+                }
+                .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
+            }
+            .navigationTitle("Setări")
+            .navigationBarTitleDisplayMode(.large)
+        }
+    }
+
+    // MARK: - Sections
+
+    @ViewBuilder
+    private var profileSection: some View {
+        Section {
+            HStack(spacing: SolSpacing.md) {
+                ZStack {
+                    Circle()
+                        .fill(Color.solMint.opacity(0.15))
+                        .frame(width: 52, height: 52)
+                    Text("A")
+                        .font(.solHeadingXL)
+                        .foregroundStyle(Color.solMint)
+                }
+
+                VStack(alignment: .leading, spacing: SolSpacing.xs) {
+                    Text(vm.userName)
+                        .font(.solHeadingSM)
+                        .foregroundStyle(Color.solTextPrimary)
+                    Text(vm.userPlan)
+                        .font(.solCaption)
+                        .foregroundStyle(Color.solMint)
+                }
+            }
+            .listRowBackground(Color.solSurface)
+            .listRowSeparatorTint(Color.solBorder)
+
+            settingsRow(icon: "person.fill", label: "Profil financiar", value: nil) {
+                // TODO: Navigate to profile editor
+            }
+
+            settingsRow(icon: "target", label: "Obiective", value: "1 activ") {
+                // TODO: Navigate to goals
+            }
+        } header: {
+            sectionHeader("PROFIL")
+        }
+    }
+
+    @ViewBuilder
+    private var connectionsSection: some View {
+        Section {
+            settingsToggleRow(
+                icon: "envelope.fill",
+                iconColor: .solInfo,
+                label: "Gmail conectat",
+                isOn: $vm.isGmailConnected
+            )
+
+            settingsToggleRow(
+                icon: "bell.fill",
+                iconColor: .solMint,
+                label: "Notificări push",
+                isOn: $vm.notificationsEnabled
+            )
+
+            settingsToggleRow(
+                icon: "calendar",
+                iconColor: .solWarning,
+                label: "Calendar (opțional)",
+                isOn: $vm.calendarEnabled
+            )
+        } header: {
+            sectionHeader("CONECTĂRI")
+        }
+    }
+
+    @ViewBuilder
+    private var notificationsSection: some View {
+        Section {
+            settingsRow(icon: "clock.fill", label: "Sumar săptămânal", value: "Duminică 20:00") {}
+            settingsRow(icon: "exclamationmark.triangle.fill", label: "Alerte financiare", value: "Activate") {}
+        } header: {
+            sectionHeader("NOTIFICĂRI")
+        }
+    }
+
+    @ViewBuilder
+    private var subscriptionSection: some View {
+        Section {
+            HStack {
+                ZStack {
+                    RoundedRectangle(cornerRadius: SolRadius.sm, style: .continuous)
+                        .fill(Color.solMint.opacity(0.15))
+                        .frame(width: 32, height: 32)
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.solMint)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Solomon Plus")
+                        .font(.solBodyMD)
+                        .foregroundStyle(Color.solTextPrimary)
+                    Text("39 RON/lună · Reînnoire pe 15 mai")
+                        .font(.solCaption)
+                        .foregroundStyle(Color.solTextMuted)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.solTextMuted)
+            }
+            .listRowBackground(Color.solSurface)
+        } header: {
+            sectionHeader("ABONAMENT")
+        }
+    }
+
+    @ViewBuilder
+    private var aboutSection: some View {
+        Section {
+            settingsRow(icon: "info.circle.fill", label: "Despre Solomon", value: "v1.0.0") {}
+            settingsRow(icon: "lock.shield.fill", label: "Confidențialitate", value: nil) {}
+            settingsRow(icon: "doc.text.fill", label: "Termeni de utilizare", value: nil) {}
+
+            settingsToggleRow(
+                icon: "brain.head.profile",
+                iconColor: .solTextMuted,
+                label: "Contribuie la training (opt-in)",
+                isOn: $vm.trainingOptIn
+            )
+        } header: {
+            sectionHeader("DESPRE")
+        }
+    }
+
+    // MARK: - Helpers
+
+    @ViewBuilder
+    private func settingsRow(icon: String, label: String, value: String?, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: SolSpacing.md) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color.solTextSecondary)
+                    .frame(width: 24)
+                Text(label)
+                    .font(.solBodyMD)
+                    .foregroundStyle(Color.solTextPrimary)
+                Spacer()
+                if let value {
+                    Text(value)
+                        .font(.solCaption)
+                        .foregroundStyle(Color.solTextMuted)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.solTextMuted)
+            }
+        }
+        .listRowBackground(Color.solSurface)
+        .listRowSeparatorTint(Color.solBorder)
+    }
+
+    @ViewBuilder
+    private func settingsToggleRow(
+        icon: String,
+        iconColor: Color,
+        label: String,
+        isOn: Binding<Bool>
+    ) -> some View {
+        HStack(spacing: SolSpacing.md) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(iconColor)
+                .frame(width: 24)
+            Text(label)
+                .font(.solBodyMD)
+                .foregroundStyle(Color.solTextPrimary)
+            Spacer()
+            Toggle("", isOn: isOn)
+                .tint(Color.solMint)
+        }
+        .listRowBackground(Color.solSurface)
+        .listRowSeparatorTint(Color.solBorder)
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.solCaption)
+            .foregroundStyle(Color.solTextMuted)
+            .tracking(1.2)
+    }
+}
+
+// MARK: - SettingsViewModel
+
+@MainActor
+final class SettingsViewModel: ObservableObject {
+    @Published var userName = "Andrei"
+    @Published var userPlan = "Solomon Plus · Activ"
+    @Published var isGmailConnected = true
+    @Published var notificationsEnabled = true
+    @Published var calendarEnabled = false
+    @Published var trainingOptIn = false
+}
+
+// MARK: - Preview
+
+#Preview {
+    SettingsView()
+}

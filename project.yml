@@ -1,0 +1,90 @@
+# Solomon iOS App — XcodeGen configuration
+# Generează SolomonApp.xcodeproj cu: `xcodegen generate`
+# Necesită: brew install xcodegen (deja instalat)
+
+name: SolomonApp
+
+options:
+  bundleIdPrefix: ro.solomon
+  deploymentTarget:
+    iOS: "18.0"
+  defaultConfig: Debug
+  createIntermediateGroups: true
+  xcodeVersion: "16.4"
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+    ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: YES
+    ENABLE_PREVIEWS: YES
+
+configs:
+  Debug: debug
+  Release: release
+
+packages:
+  # Modulele SPM Solomon — definiți în Package.swift din aceeași rădăcină
+  SolomonCore:
+    path: .
+  SolomonLLM:
+    path: .
+  SolomonMoments:
+    path: .
+  SolomonAnalytics:
+    path: .
+  SolomonStorage:
+    path: .
+  SolomonWeb:
+    path: .
+  SolomonEmail:
+    path: .
+
+targets:
+  SolomonApp:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: SolomonApp
+        excludes:
+          - "**/*.md"
+    info:
+      path: SolomonApp/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ro.solomon.app
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1"  # iPhone only (1=iPhone, 2=iPad, 1,2=both)
+        # IPHONEOS_DEPLOYMENT_TARGET is set via deploymentTarget above
+    dependencies:
+      - package: SolomonCore
+        product: SolomonCore
+      - package: SolomonLLM
+        product: SolomonLLM
+      - package: SolomonMoments
+        product: SolomonMoments
+      - package: SolomonAnalytics
+        product: SolomonAnalytics
+      - package: SolomonStorage
+        product: SolomonStorage
+      - package: SolomonWeb
+        product: SolomonWeb
+      - package: SolomonEmail
+        product: SolomonEmail
+
+  # Test target pentru UI smoke tests (opțional Faza 11+)
+  SolomonAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: SolomonAppTests
+        optional: true
+    dependencies:
+      - target: SolomonApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ro.solomon.app.tests
