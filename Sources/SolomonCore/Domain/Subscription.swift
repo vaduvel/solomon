@@ -34,7 +34,7 @@ public struct Subscription: Codable, Sendable, Hashable, Identifiable {
     /// Câte zile au trecut de la ultima utilizare detectată. `nil` = nu avem semnal.
     public var lastUsedDaysAgo: Int?
     public var cancellationDifficulty: CancellationDifficulty
-    public var cancellationURL: URL?
+    public var cancellationUrl: URL?
     public var cancellationStepsSummary: String?
     public var alternativeSuggestion: String?
     /// Atenționare specifică (ex: „are penalty pentru anulare anticipată").
@@ -46,7 +46,7 @@ public struct Subscription: Codable, Sendable, Hashable, Identifiable {
         amountMonthly: Money,
         lastUsedDaysAgo: Int? = nil,
         cancellationDifficulty: CancellationDifficulty = .medium,
-        cancellationURL: URL? = nil,
+        cancellationUrl: URL? = nil,
         cancellationStepsSummary: String? = nil,
         alternativeSuggestion: String? = nil,
         cancellationWarning: String? = nil
@@ -56,7 +56,7 @@ public struct Subscription: Codable, Sendable, Hashable, Identifiable {
         self.amountMonthly = amountMonthly
         self.lastUsedDaysAgo = lastUsedDaysAgo
         self.cancellationDifficulty = cancellationDifficulty
-        self.cancellationURL = cancellationURL
+        self.cancellationUrl = cancellationUrl
         self.cancellationStepsSummary = cancellationStepsSummary
         self.alternativeSuggestion = alternativeSuggestion
         self.cancellationWarning = cancellationWarning
