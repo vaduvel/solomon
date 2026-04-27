@@ -1,69 +1,91 @@
 import SwiftUI
 
-// MARK: - Solomon Design System — Tipografie
+// MARK: - Solomon Design System v1.0 — Tipografie
 //
-// SF Pro Display pentru headings mari, SF Pro Text pentru body, SF Mono pentru sume.
-// Scara completă conform DS v0.
+// Sursa adevărului: Penny DS v1.0
+//   - Primary: Space Grotesk (headings, UI labels, CTAs)
+//   - Secondary: Inter (body text, meta, captions)
+//   - Mono: JetBrains Mono (amounts, numbers, currency)
+//
+// IMPORTANT: Fonturile custom NU sunt încă embedded în bundle.
+// Pentru moment folosim system fallbacks geometric similare:
+//   - Space Grotesk → SF Pro Display (geometric sans)
+//   - Inter → SF Pro Text (humanist sans, optimized for UI)
+//   - JetBrains Mono → SF Mono (monospaced)
+//
+// TODO Faza 14+: download .ttf-uri și adaugă la Assets/Fonts în Info.plist.
 
 public extension Font {
 
-    // MARK: - Display (numere eroice, splash)
+    // MARK: - Display / Hero (Space Grotesk Bold, 40px)
 
-    /// 64pt Bold — numere mari (balanță, sumă principală)
+    static let solDisplay: Font = .system(size: 40, weight: .bold, design: .default)
+
+    /// Aliasuri legacy
     static let solDisplayXL: Font = .system(size: 64, weight: .bold, design: .default)
-    /// 48pt Bold — headings principale
-    static let solDisplayLG: Font = .system(size: 48, weight: .bold, design: .default)
+    static let solDisplayLG: Font = .system(size: 40, weight: .bold, design: .default)
 
     // MARK: - Headings
 
-    /// 28pt Bold — secțiuni principale
-    static let solHeadingXL: Font = .system(size: 28, weight: .bold, design: .default)
-    /// 22pt Semibold — titluri card
-    static let solHeadingMD: Font = .system(size: 22, weight: .semibold, design: .default)
-    /// 17pt Semibold — sub-titluri
-    static let solHeadingSM: Font = .system(size: 17, weight: .semibold, design: .default)
+    /// H1 / Screen Title — 22px Bold
+    static let solH1: Font = .system(size: 22, weight: .bold, design: .default)
+    /// H2 / Section — 20px Semibold
+    static let solH2: Font = .system(size: 20, weight: .semibold, design: .default)
+    /// H3 / Card Title — 18px Semibold
+    static let solH3: Font = .system(size: 18, weight: .semibold, design: .default)
 
-    // MARK: - Body
+    /// Aliasuri legacy
+    static let solHeadingXL: Font = .system(size: 22, weight: .bold, design: .default)
+    static let solHeadingMD: Font = .system(size: 20, weight: .semibold, design: .default)
+    static let solHeadingSM: Font = .system(size: 18, weight: .semibold, design: .default)
 
-    /// 17pt Regular — body principal (liste, descrieri)
-    static let solBodyLG: Font = .system(size: 17, weight: .regular, design: .default)
-    /// 15pt Regular — body secundar (sub-text, metadata)
-    static let solBodyMD: Font = .system(size: 15, weight: .regular, design: .default)
-    /// 13pt Regular — caption, labels mici
-    static let solCaption: Font = .system(size: 13, weight: .medium, design: .default)
+    // MARK: - Body (Inter)
 
-    // MARK: - Convenience aliases
-
-    /// Alias pentru solHeadingSM (17pt Semibold) — uzaj curent în views
-    static let solHeadline: Font = .system(size: 17, weight: .semibold, design: .default)
-    /// Alias pentru solBodyMD (15pt Regular)
+    /// Body / Default — 15px Regular
     static let solBody: Font = .system(size: 15, weight: .regular, design: .default)
-    /// 15pt Semibold — body cu accent
+    /// Body bold (CTAs, emphasis) — 15px Semibold
     static let solBodyBold: Font = .system(size: 15, weight: .semibold, design: .default)
-    /// Alias pentru solMonoMD (15pt Mono)
-    static let solMono: Font = .system(size: 15, weight: .medium, design: .monospaced)
+    /// Caption / Meta — 13px Regular
+    static let solCaption: Font = .system(size: 13, weight: .regular, design: .default)
+    /// Micro / Badge — 11px Medium
+    static let solMicro: Font = .system(size: 11, weight: .medium, design: .default)
 
-    // MARK: - Mono (sume inline)
+    /// Aliasuri legacy
+    static let solBodyLG: Font = .system(size: 15, weight: .regular, design: .default)
+    static let solBodyMD: Font = .system(size: 15, weight: .regular, design: .default)
 
-    /// 13pt SF Mono Medium — sume afișate inline
+    // MARK: - Mono (JetBrains Mono → SF Mono)
+
+    /// Mono / Amount — 16px Medium-Semibold
+    static let solMonoAmount: Font = .system(size: 16, weight: .semibold, design: .monospaced)
+    /// Mono small (inline) — 13px Medium
     static let solMonoSM: Font = .system(size: 13, weight: .medium, design: .monospaced)
-    /// 15pt SF Mono Medium — sume în card
-    static let solMonoMD: Font = .system(size: 15, weight: .medium, design: .monospaced)
-    /// 20pt SF Mono Semibold — sume mari în hero
-    static let solMonoLG: Font = .system(size: 20, weight: .semibold, design: .monospaced)
+    /// Mono medium — 16px Medium
+    static let solMonoMD: Font = .system(size: 16, weight: .medium, design: .monospaced)
+    /// Mono large (hero amounts) — 40px Bold
+    static let solMonoLG: Font = .system(size: 40, weight: .bold, design: .monospaced)
+
+    /// Alias legacy
+    static let solMono: Font = .system(size: 16, weight: .medium, design: .monospaced)
+    static let solHeadline: Font = .system(size: 18, weight: .semibold, design: .default)
 }
 
 // MARK: - Text modifier helpers
 
 public extension View {
 
-    /// Aplică stilul de sumă (mono + mint)
-    func solMoneyStyle(size: Font = .solMonoMD, color: Color = .solMint) -> some View {
+    /// Aplică stilul de sumă (mono + primary green)
+    func solMoneyStyle(size: Font = .solMonoAmount, color: Color = .solPrimary) -> some View {
         self.font(size).foregroundStyle(color)
     }
 
     /// Aplică stilul de text atenuat
+    func solMutedStyle() -> some View {
+        self.font(.solBody).foregroundStyle(Color.solMuted)
+    }
+
+    /// Alias legacy
     func solMuted() -> some View {
-        self.font(.solBodyMD).foregroundStyle(Color.solTextMuted)
+        self.font(.solBody).foregroundStyle(Color.solMuted)
     }
 }

@@ -4,8 +4,8 @@ import SolomonStorage
 // MARK: - SolomonApp
 //
 // Entry point al aplicației Solomon iOS.
-// Setează forced dark mode și accent mint din design system.
-// Gestionează URL scheme `solomon://` pentru ingestia notificărilor bancare.
+// Decide între onboarding (first-run) și ContentView principal.
+// Setează forced dark mode și configurează NotificationIngestionService.
 
 @main
 struct SolomonApp: App {
@@ -13,6 +13,10 @@ struct SolomonApp: App {
     // MARK: - Dependencies
 
     private let persistence = SolomonPersistenceController.shared
+
+    // MARK: - First-run gate
+
+    @State private var showOnboarding: Bool = !OnboardingState.hasCompletedOnboarding
 
     // MARK: - Init
 
@@ -26,13 +30,25 @@ struct SolomonApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .preferredColorScheme(.dark)  // Solomon e AMOLED-first dark
-                .onOpenURL { url in
-                    // Procesează solomon://transaction?raw=...
-                    NotificationIngestionService.shared.ingest(url: url)
+            Group {
+                if showOnboarding {
+                    OnboardingContainerView {
+                        // Onboarding complet → trigger main app
+                        withAnimation(.easeInOut(duration: 0.4)) {
+                            showOnboarding = false
+                        }
+                    }
+                    .transition(.opacity)
+                } else {
+                    ContentView()
+                        .preferredColorScheme(.dark)
+                        .onOpenURL { url in
+                            NotificationIngestionService.shared.ingest(url: url)
+                        }
+                        .environment(\.managedObjectContext, persistence.container.viewContext)
+                        .transition(.opacity)
                 }
-                .environment(\.managedObjectContext, persistence.container.viewContext)
+            }
         }
     }
 }
