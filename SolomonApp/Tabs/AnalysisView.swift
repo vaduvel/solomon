@@ -1,4 +1,7 @@
 import SwiftUI
+import SolomonCore
+import SolomonStorage
+import SolomonAnalytics
 
 // MARK: - AnalysisView (Tab 2 — Analiză)
 //
@@ -34,7 +37,10 @@ struct AnalysisView: View {
             .navigationTitle("Analiză")
             .navigationBarTitleDisplayMode(.large)
         }
-        .task { await vm.load() }
+        .task {
+            vm.configure(persistence: SolomonPersistenceController.shared)
+            await vm.load()
+        }
     }
 
     // MARK: - Sub-views
@@ -43,18 +49,22 @@ struct AnalysisView: View {
     private var monthSummaryCard: some View {
         VStack(spacing: SolSpacing.base) {
             HStack {
-                summaryKPI(label: "Cheltuieli april", value: "3.240 RON", color: .solTextPrimary)
-                Divider()
-                    .frame(height: 40)
-                    .background(Color.solBorder)
-                summaryKPI(label: "vs. luna trecută", value: "+8%", color: .solWarning)
-                Divider()
-                    .frame(height: 40)
-                    .background(Color.solBorder)
-                summaryKPI(label: "Economisit", value: "450 RON", color: .solMint)
+                summaryKPI(
+                    label: "Cheltuieli \(vm.currentMonthLabel.lowercased())",
+                    value: vm.currentMonthSpentRON > 0 ? "\(vm.currentMonthSpentRON) RON" : "—",
+                    color: .solTextPrimary
+                )
+                Divider().frame(height: 40).background(Color.solBorder)
+                summaryKPI(
+                    label: "vs. luna trecută",
+                    value: vm.deltaPercentText,
+                    color: vm.deltaIsWarning ? .solWarning : .solPrimary
+                )
+                Divider().frame(height: 40).background(Color.solBorder)
+                summaryKPI(label: "Diferență", value: vm.savingsText, color: vm.savingsText.hasPrefix("+") ? .solPrimary : .solMuted)
             }
         }
-        .padding(SolSpacing.xl)
+        .padding(SolSpacing.cardStandard)
         .solCard()
         .padding(.horizontal, SolSpacing.screenHorizontal)
     }
@@ -207,24 +217,138 @@ final class AnalysisViewModel: ObservableObject {
 
     @Published var categories: [CategoryBreakdown] = []
     @Published var monthlyTrend: [MonthTrend] = []
+    @Published var currentMonthSpentRON: Int = 0
+    @Published var lastMonthSpentRON: Int = 0
+    @Published var currentMonthLabel: String = ""
+    @Published var deltaPercentText: String = ""
+    @Published var savingsText: String = ""
+    @Published var deltaIsWarning: Bool = false
+
+    private var transactionRepo: (any TransactionRepository)?
+    private let patternDetector = PatternDetector()
+    private let cashFlowAnalyzer = CashFlowAnalyzer()
+
+    func configure(persistence: SolomonPersistenceController) {
+        let ctx = persistence.container.viewContext
+        self.transactionRepo = CoreDataTransactionRepository(context: ctx)
+    }
 
     func load() async {
-        // Mock data — Faza 11 va folosi SolomonAnalytics real
-        let total = 3240.0
-        categories = [
-            CategoryBreakdown(name: "Livrare mâncare", amount: 680, totalAmount: total, iconName: "bag.fill", color: .solWarning),
-            CategoryBreakdown(name: "Rate + chirie", amount: 1500, totalAmount: total, iconName: "house.fill", color: .solInfo),
-            CategoryBreakdown(name: "Abonamente", amount: 320, totalAmount: total, iconName: "play.circle.fill", color: .solMintDim),
-            CategoryBreakdown(name: "Transport", amount: 280, totalAmount: total, iconName: "car.fill", color: .solTextSecondary),
-            CategoryBreakdown(name: "Sănătate", amount: 160, totalAmount: total, iconName: "cross.fill", color: .solDanger),
-        ]
+        guard let repo = transactionRepo else { return }
+        let now = Date()
+        let cal = Calendar.current
 
-        let maxAmount = 4100.0
-        monthlyTrend = [
-            MonthTrend(label: "Feb", amount: 4100, maxAmount: maxAmount, isCurrentMonth: false),
-            MonthTrend(label: "Mar", amount: 3810, maxAmount: maxAmount, isCurrentMonth: false),
-            MonthTrend(label: "Apr", amount: 3240, maxAmount: maxAmount, isCurrentMonth: true),
-        ]
+        // Fetch ultimele 90 zile pentru pattern detection
+        guard let from90 = cal.date(byAdding: .day, value: -90, to: now) else { return }
+        let txs = (try? repo.fetch(from: from90, to: now)) ?? []
+
+        // Pattern detection
+        let report = patternDetector.detect(transactions: txs, windowDays: 90, referenceDate: now)
+
+        // Top categorii (max 6 pentru afișare)
+        let totalSpent = txs.filter { $0.isOutgoing }.reduce(0) { $0 + $1.amount.amount }
+        let totalDouble = max(1.0, Double(totalSpent))
+
+        categories = report.topCategories.prefix(6).map { c in
+            CategoryBreakdown(
+                name: c.category.displayNameRO,
+                amount: Double(c.totalAmount.amount),
+                totalAmount: totalDouble,
+                iconName: iconForCategory(c.category),
+                color: colorForCategory(c.category)
+            )
+        }
+
+        // Trend lunar (3 luni)
+        var trend: [MonthTrend] = []
+        var maxMonth = 0
+        for offset in stride(from: 2, through: 0, by: -1) {
+            guard let monthDate = cal.date(byAdding: .month, value: -offset, to: now) else { continue }
+            let comps = cal.dateComponents([.year, .month], from: monthDate)
+            guard let monthStart = cal.date(from: comps),
+                  let nextMonth = cal.date(byAdding: .month, value: 1, to: monthStart),
+                  let monthEnd = cal.date(byAdding: .day, value: -1, to: nextMonth) else { continue }
+
+            let monthTxs = (try? repo.fetch(from: monthStart, to: monthEnd)) ?? []
+            let spent = monthTxs.filter { $0.isOutgoing }.reduce(0) { $0 + $1.amount.amount }
+            maxMonth = max(maxMonth, spent)
+
+            let label = monthLabel(monthDate)
+            trend.append(MonthTrend(
+                label: label,
+                amount: Double(spent),
+                maxAmount: Double(maxMonth),
+                isCurrentMonth: offset == 0
+            ))
+        }
+        // Recalculează maxAmount pe toate
+        let trueMax = trend.map { $0.amount }.max() ?? 1
+        monthlyTrend = trend.map { m in
+            MonthTrend(label: m.label, amount: m.amount, maxAmount: max(trueMax, 1), isCurrentMonth: m.isCurrentMonth)
+        }
+
+        // KPI summary
+        currentMonthSpentRON = Int(monthlyTrend.last?.amount ?? 0)
+        lastMonthSpentRON = monthlyTrend.count >= 2 ? Int(monthlyTrend[monthlyTrend.count - 2].amount) : 0
+        currentMonthLabel = monthlyTrend.last?.label ?? ""
+
+        if lastMonthSpentRON > 0 && currentMonthSpentRON > 0 {
+            let delta = ((Double(currentMonthSpentRON) - Double(lastMonthSpentRON)) / Double(lastMonthSpentRON)) * 100
+            let prefix = delta > 0 ? "+" : ""
+            deltaPercentText = "\(prefix)\(Int(delta.rounded()))%"
+            deltaIsWarning = delta > 5
+        } else {
+            deltaPercentText = "—"
+            deltaIsWarning = false
+        }
+
+        // Savings (positive = economisit prin reducere cheltuieli)
+        if lastMonthSpentRON > currentMonthSpentRON {
+            savingsText = "+\(lastMonthSpentRON - currentMonthSpentRON) RON"
+        } else if currentMonthSpentRON > lastMonthSpentRON {
+            savingsText = "−\(currentMonthSpentRON - lastMonthSpentRON) RON"
+        } else {
+            savingsText = "0 RON"
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func monthLabel(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ro_RO")
+        f.dateFormat = "MMM"
+        return f.string(from: date).capitalized
+    }
+
+    private func iconForCategory(_ c: TransactionCategory) -> String {
+        switch c {
+        case .foodDelivery:    return "bag.fill"
+        case .foodDining:      return "fork.knife"
+        case .foodGrocery:     return "cart.fill"
+        case .transport:       return "car.fill"
+        case .utilities:       return "bolt.fill"
+        case .rentMortgage:    return "house.fill"
+        case .subscriptions:   return "play.circle.fill"
+        case .shoppingOnline:  return "shippingbox.fill"
+        case .shoppingOffline: return "bag.fill"
+        case .entertainment:   return "ticket.fill"
+        case .health:          return "cross.fill"
+        case .loansBank, .loansIFN, .bnpl: return "creditcard.fill"
+        case .travel:          return "airplane"
+        case .savings:         return "banknote.fill"
+        case .unknown:         return "questionmark.circle.fill"
+        }
+    }
+
+    private func colorForCategory(_ c: TransactionCategory) -> Color {
+        switch c.group {
+        case .essentials: return .solInfo
+        case .lifestyle:  return .solWarning
+        case .debt:       return .solDestructive
+        case .savings:    return .solPrimary
+        case .other:      return .solMuted
+        }
     }
 }
 

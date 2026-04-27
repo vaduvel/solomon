@@ -1,9 +1,11 @@
 import SwiftUI
+import SolomonCore
+import SolomonStorage
 
 // MARK: - WalletView (Tab 3 — Portofel)
 //
+// Faza 17B: WIRED la repositories CoreData (Obligation, Subscription, Transaction).
 // Afișează obligațiile active, abonamentele detectate, tranzacții recente.
-// Faza 10: layout complet cu date mock. Faza 11+: SolomonStorage real.
 
 struct WalletView: View {
 
@@ -16,12 +18,10 @@ struct WalletView: View {
                 Color.solCanvas.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    // Segment control
                     segmentControl
                         .padding(.horizontal, SolSpacing.screenHorizontal)
                         .padding(.vertical, SolSpacing.base)
 
-                    // Conținut per segment
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: SolSpacing.sectionGap) {
                             switch selectedSegment {
@@ -38,7 +38,10 @@ struct WalletView: View {
             .navigationTitle("Portofel")
             .navigationBarTitleDisplayMode(.large)
         }
-        .task { await vm.load() }
+        .task {
+            vm.configure(persistence: SolomonPersistenceController.shared)
+            await vm.load()
+        }
     }
 
     // MARK: - Segment Control
@@ -53,14 +56,14 @@ struct WalletView: View {
                     }
                 } label: {
                     Text(["Obligații", "Abonamente", "Tranzacții"][idx])
-                        .font(.solBodyMD)
+                        .font(.solBodyBold)
                         .foregroundStyle(selectedSegment == idx ? Color.solCanvas : Color.solTextSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, SolSpacing.sm)
                         .background(
                             selectedSegment == idx
-                                ? Color.solMint
-                                : Color.clear
+                                ? AnyShapeStyle(LinearGradient.solPrimaryCTA)
+                                : AnyShapeStyle(Color.clear)
                         )
                         .clipShape(Capsule())
                 }
@@ -68,7 +71,7 @@ struct WalletView: View {
             }
         }
         .padding(SolSpacing.xs)
-        .background(Color.solSurface)
+        .background(Color.solCard)
         .clipShape(Capsule())
     }
 
@@ -77,292 +80,384 @@ struct WalletView: View {
     @ViewBuilder
     private var obligationsSection: some View {
         VStack(spacing: SolSpacing.base) {
-            // Total obligații
+            // Total
             HStack {
                 VStack(alignment: .leading, spacing: SolSpacing.xs) {
                     Text("Total lunar rezervat")
                         .font(.solCaption)
-                        .foregroundStyle(Color.solTextMuted)
-                    Text("2.295 RON")
-                        .font(.solHeadingXL)
-                        .foregroundStyle(Color.solTextPrimary)
+                        .foregroundStyle(Color.solMuted)
+                    Text(vm.obligationsTotalFormatted)
+                        .font(.solH1)
+                        .foregroundStyle(Color.solForeground)
                         .monospacedDigit()
                 }
                 Spacer()
-                VStack(alignment: .trailing, spacing: SolSpacing.xs) {
-                    Text("44% din venit")
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solWarning)
-                    Text("⚠ Monitorizez")
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solWarning)
+                if !vm.obligationsPercentText.isEmpty {
+                    StatusBadge(title: vm.obligationsPercentText, kind: vm.obligationsKind)
                 }
             }
-            .padding(SolSpacing.xl)
+            .padding(SolSpacing.cardStandard)
             .solCard()
             .padding(.horizontal, SolSpacing.screenHorizontal)
 
-            // Lista obligații
-            VStack(spacing: SolSpacing.sm) {
-                ForEach(vm.obligations) { obl in
-                    obligationRow(obl)
+            // Lista
+            if vm.obligations.isEmpty {
+                emptyState(icon: "house.fill", title: "Nicio obligație", subtitle: "Adaugă chiria, ratele și abonamentele tale.")
+                    .padding(.horizontal, SolSpacing.screenHorizontal)
+            } else {
+                VStack(spacing: SolSpacing.sm) {
+                    ForEach(vm.obligations) { obl in
+                        ObligationRow(obligation: obl)
+                    }
                 }
+                .padding(.horizontal, SolSpacing.screenHorizontal)
             }
-            .padding(.horizontal, SolSpacing.screenHorizontal)
-
-            // Buton adăugare
-            SolomonButton("+ Adaugă obligație", style: .secondary) {
-                // TODO: Sheet add obligation
-            }
-            .padding(.horizontal, SolSpacing.screenHorizontal)
         }
     }
-
-    @ViewBuilder
-    private func obligationRow(_ obl: ObligationItem) -> some View {
-        HStack(spacing: SolSpacing.md) {
-            ZStack {
-                RoundedRectangle(cornerRadius: SolRadius.sm, style: .continuous)
-                    .fill(Color.solInfo.opacity(0.12))
-                    .frame(width: 36, height: 36)
-                Image(systemName: obl.iconName)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color.solInfo)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(obl.name)
-                    .font(.solBodyMD)
-                    .foregroundStyle(Color.solTextPrimary)
-                Text(obl.dueDateFormatted)
-                    .font(.solCaption)
-                    .foregroundStyle(obl.isUrgent ? Color.solWarning : Color.solTextMuted)
-            }
-
-            Spacer()
-
-            Text(obl.amountFormatted)
-                .font(.solMonoSM)
-                .foregroundStyle(Color.solTextPrimary)
-        }
-        .padding(SolSpacing.md)
-        .solCard()
-    }
-
-    // MARK: - Abonamente
 
     @ViewBuilder
     private var subscriptionsSection: some View {
         VStack(spacing: SolSpacing.base) {
-            // Total abonamente
             HStack {
                 VStack(alignment: .leading, spacing: SolSpacing.xs) {
                     Text("Total abonamente / lună")
                         .font(.solCaption)
-                        .foregroundStyle(Color.solTextMuted)
-                    Text("320 RON")
-                        .font(.solHeadingXL)
-                        .foregroundStyle(Color.solMint)
+                        .foregroundStyle(Color.solMuted)
+                    Text(vm.subscriptionsTotalFormatted)
+                        .font(.solH1)
+                        .foregroundStyle(LinearGradient.solHero)
                         .monospacedDigit()
                 }
                 Spacer()
-                VStack(alignment: .trailing, spacing: SolSpacing.xs) {
-                    Text("Potențial economii")
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solTextMuted)
-                    Text("104 RON/lună")
-                        .font(.solMonoSM)
-                        .foregroundStyle(Color.solMint)
+                if vm.ghostSavingsPotential > 0 {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("Potențial economii")
+                            .font(.solCaption)
+                            .foregroundStyle(Color.solMuted)
+                        Text("\(vm.ghostSavingsPotential) RON/lună")
+                            .font(.solMonoSM)
+                            .foregroundStyle(Color.solPrimary)
+                    }
                 }
             }
-            .padding(SolSpacing.xl)
+            .padding(SolSpacing.cardStandard)
             .solCard()
             .padding(.horizontal, SolSpacing.screenHorizontal)
 
-            VStack(spacing: SolSpacing.sm) {
-                ForEach(vm.subscriptions) { sub in
-                    subscriptionRow(sub)
-                }
-            }
-            .padding(.horizontal, SolSpacing.screenHorizontal)
-        }
-    }
-
-    @ViewBuilder
-    private func subscriptionRow(_ sub: SubscriptionItem) -> some View {
-        HStack(spacing: SolSpacing.md) {
-            ZStack {
-                RoundedRectangle(cornerRadius: SolRadius.sm, style: .continuous)
-                    .fill(sub.isGhost ? Color.solDanger.opacity(0.12) : Color.solMintDim.opacity(0.12))
-                    .frame(width: 36, height: 36)
-                Image(systemName: "play.rectangle.fill")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(sub.isGhost ? Color.solDanger : Color.solMintDim)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: SolSpacing.xs) {
-                    Text(sub.name)
-                        .font(.solBodyMD)
-                        .foregroundStyle(Color.solTextPrimary)
-                    if sub.isGhost {
-                        Text("GHOST")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(Color.solDanger)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                            .background(Color.solDanger.opacity(0.15))
-                            .clipShape(Capsule())
+            if vm.subscriptions.isEmpty {
+                emptyState(icon: "play.rectangle.fill", title: "Niciun abonament", subtitle: "Solomon le va detecta automat din email-uri.")
+                    .padding(.horizontal, SolSpacing.screenHorizontal)
+            } else {
+                VStack(spacing: SolSpacing.sm) {
+                    ForEach(vm.subscriptions) { sub in
+                        SubscriptionRow(subscription: sub)
                     }
                 }
-                Text(sub.lastUsedFormatted)
-                    .font(.solCaption)
-                    .foregroundStyle(Color.solTextMuted)
+                .padding(.horizontal, SolSpacing.screenHorizontal)
             }
-
-            Spacer()
-
-            Text(sub.amountFormatted)
-                .font(.solMonoSM)
-                .foregroundStyle(sub.isGhost ? Color.solDanger : Color.solTextPrimary)
         }
-        .padding(SolSpacing.md)
-        .solCard()
     }
-
-    // MARK: - Tranzacții
 
     @ViewBuilder
     private var transactionsSection: some View {
         VStack(spacing: SolSpacing.base) {
-            VStack(spacing: SolSpacing.sm) {
-                ForEach(vm.transactions) { tx in
-                    transactionRow(tx)
+            if vm.transactions.isEmpty {
+                emptyState(icon: "list.bullet.rectangle", title: "Nicio tranzacție", subtitle: "Conectează banca via Shortcuts sau adaugă manual.")
+                    .padding(.horizontal, SolSpacing.screenHorizontal)
+            } else {
+                VStack(spacing: SolSpacing.sm) {
+                    ForEach(vm.transactions) { tx in
+                        TransactionRow(transaction: tx)
+                    }
                 }
+                .padding(.horizontal, SolSpacing.screenHorizontal)
             }
-            .padding(.horizontal, SolSpacing.screenHorizontal)
         }
     }
 
+    // MARK: - Empty state
+
     @ViewBuilder
-    private func transactionRow(_ tx: TransactionItem) -> some View {
+    private func emptyState(icon: String, title: String, subtitle: String) -> some View {
+        VStack(spacing: SolSpacing.sm) {
+            IconContainer(systemName: icon, variant: .tinted, size: 56, iconSize: 22)
+            Text(title)
+                .font(.solBodyBold)
+                .foregroundStyle(Color.solForeground)
+            Text(subtitle)
+                .font(.solCaption)
+                .foregroundStyle(Color.solMuted)
+                .multilineTextAlignment(.center)
+        }
+        .padding(SolSpacing.xl)
+        .frame(maxWidth: .infinity)
+        .solCard()
+    }
+}
+
+// MARK: - Row components (separate for reuse)
+
+struct ObligationRow: View {
+    let obligation: Obligation
+
+    var body: some View {
+        HStack(spacing: SolSpacing.md) {
+            IconContainer(
+                systemName: iconForKind(obligation.kind),
+                variant: variantForKind(obligation.kind),
+                size: 36,
+                iconSize: 14
+            )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(obligation.name)
+                    .font(.solBody)
+                    .foregroundStyle(Color.solForeground)
+                Text(dueDateText)
+                    .font(.solCaption)
+                    .foregroundStyle(isUrgent ? Color.solWarning : Color.solMuted)
+            }
+
+            Spacer()
+
+            Text("\(obligation.amount.amount) RON")
+                .font(.solMonoMD)
+                .foregroundStyle(Color.solForeground)
+        }
+        .padding(SolSpacing.base)
+        .solCard()
+    }
+
+    private var dayOfMonth: Int {
+        Calendar.current.component(.day, from: Date())
+    }
+
+    private var daysUntil: Int {
+        let due = obligation.dayOfMonth
+        return due > dayOfMonth ? (due - dayOfMonth) : (30 - dayOfMonth + due)
+    }
+
+    private var isUrgent: Bool { daysUntil <= 3 }
+
+    private var dueDateText: String {
+        if isUrgent { return "Scadent în \(daysUntil) zile ⚠" }
+        return "Scadent pe \(obligation.dayOfMonth)"
+    }
+
+    private func iconForKind(_ kind: ObligationKind) -> String {
+        switch kind {
+        case .rentMortgage: return "house.fill"
+        case .utility:      return "bolt.fill"
+        case .subscription: return "play.rectangle.fill"
+        case .loanBank:     return "building.columns.fill"
+        case .loanIFN:      return "exclamationmark.octagon.fill"
+        case .bnpl:         return "creditcard.fill"
+        case .insurance:    return "shield.fill"
+        case .other:        return "doc.text.fill"
+        }
+    }
+
+    private func variantForKind(_ kind: ObligationKind) -> IconContainer.Variant {
+        switch kind {
+        case .rentMortgage: return .cyan
+        case .utility:      return .neon
+        case .subscription: return .tinted
+        case .loanBank:     return .warn
+        case .loanIFN:      return .danger
+        case .bnpl:         return .danger
+        case .insurance:    return .cyan
+        case .other:        return .tinted
+        }
+    }
+}
+
+struct SubscriptionRow: View {
+    let subscription: Subscription
+
+    var body: some View {
+        HStack(spacing: SolSpacing.md) {
+            IconContainer(
+                systemName: "play.rectangle.fill",
+                variant: subscription.isGhost ? .danger : .neon,
+                size: 36,
+                iconSize: 14
+            )
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: SolSpacing.xs) {
+                    Text(subscription.name)
+                        .font(.solBody)
+                        .foregroundStyle(Color.solForeground)
+                    if subscription.isGhost {
+                        LabelBadge(title: "GHOST", color: .solDestructive)
+                    }
+                }
+                Text(lastUsedText)
+                    .font(.solCaption)
+                    .foregroundStyle(subscription.isGhost ? Color.solDestructive : Color.solMuted)
+            }
+
+            Spacer()
+
+            Text("\(subscription.amountMonthly.amount) RON/lună")
+                .font(.solMonoMD)
+                .foregroundStyle(subscription.isGhost ? Color.solDestructive : Color.solForeground)
+        }
+        .padding(SolSpacing.base)
+        .solCard()
+    }
+
+    private var lastUsedText: String {
+        guard let days = subscription.lastUsedDaysAgo else {
+            return "Activ"
+        }
+        if days == 0 { return "Folosit azi" }
+        if days < 7 { return "Folosit acum \(days) zile" }
+        if subscription.isGhost { return "Nefolosit de \(days) zile" }
+        return "Folosit acum \(days / 7) săptămâni"
+    }
+}
+
+struct TransactionRow: View {
+    let transaction: SolomonCore.Transaction
+
+    var body: some View {
         HStack(spacing: SolSpacing.md) {
             ZStack {
                 Circle()
-                    .fill(Color.solSurface)
+                    .fill(Color.solSecondary)
                     .frame(width: 36, height: 36)
-                Text(tx.emoji)
+                Text(emoji)
                     .font(.system(size: 16))
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(tx.merchant)
-                    .font(.solBodyMD)
-                    .foregroundStyle(Color.solTextPrimary)
-                Text(tx.categoryFormatted)
+                Text(transaction.merchant ?? "Tranzacție")
+                    .font(.solBody)
+                    .foregroundStyle(Color.solForeground)
+                Text(transaction.category.displayNameRO)
                     .font(.solCaption)
-                    .foregroundStyle(Color.solTextMuted)
+                    .foregroundStyle(Color.solMuted)
             }
 
             Spacer()
 
             VStack(alignment: .trailing, spacing: 2) {
-                Text(tx.amountFormatted)
-                    .font(.solMonoSM)
-                    .foregroundStyle(tx.isDebit ? Color.solTextPrimary : Color.solMint)
-                Text(tx.dateFormatted)
+                Text(amountText)
+                    .font(.solMonoMD)
+                    .foregroundStyle(transaction.isOutgoing ? Color.solForeground : Color.solPrimary)
+                Text(dateText)
                     .font(.solCaption)
-                    .foregroundStyle(Color.solTextMuted)
+                    .foregroundStyle(Color.solMuted)
             }
         }
-        .padding(SolSpacing.md)
+        .padding(SolSpacing.base)
         .solCard()
     }
-}
 
-// MARK: - Supporting models (Faza 10 mock)
+    private var amountText: String {
+        let prefix = transaction.isOutgoing ? "−" : "+"
+        return "\(prefix)\(transaction.amount.amount) RON"
+    }
 
-struct ObligationItem: Identifiable {
-    let id = UUID()
-    let name: String
-    let amount: Double
-    let dueDay: Int
-    let iconName: String
+    private var emoji: String {
+        switch transaction.category {
+        case .foodDelivery: return "🛵"
+        case .foodDining:   return "🍽"
+        case .foodGrocery:  return "🛒"
+        case .transport:    return "🚗"
+        case .utilities:    return "⚡️"
+        case .rentMortgage: return "🏠"
+        case .subscriptions: return "📺"
+        case .shoppingOnline: return "📦"
+        case .shoppingOffline: return "🛍"
+        case .entertainment: return "🎬"
+        case .health:       return "🏥"
+        case .loansIFN, .loansBank, .bnpl: return "💳"
+        case .travel:       return "✈️"
+        case .savings:      return "🐷"
+        case .unknown:      return transaction.isIncoming ? "💰" : "💸"
+        }
+    }
 
-    var isUrgent: Bool { dueDay <= 3 }
-    var amountFormatted: String { "\(Int(amount)) RON" }
-    var dueDateFormatted: String {
-        isUrgent ? "Scadent în \(dueDay) zile ⚠" : "Scadent pe \(dueDay)"
+    private var dateText: String {
+        let f = DateFormatter()
+        f.dateFormat = "d MMM"
+        f.locale = Locale(identifier: "ro_RO")
+        return f.string(from: transaction.date)
     }
 }
 
-struct SubscriptionItem: Identifiable {
-    let id = UUID()
-    let name: String
-    let amount: Double
-    let lastUsedDaysAgo: Int
-    let isGhost: Bool
-
-    var amountFormatted: String { "\(Int(amount)) RON/lună" }
-    var lastUsedFormatted: String {
-        isGhost ? "Nefolosit de \(lastUsedDaysAgo)+ zile" : "Activ"
-    }
-}
-
-struct TransactionItem: Identifiable {
-    let id = UUID()
-    let merchant: String
-    let amount: Double
-    let category: String
-    let emoji: String
-    let date: Date
-    let isDebit: Bool
-
-    var amountFormatted: String {
-        (isDebit ? "- " : "+ ") + "\(Int(amount)) RON"
-    }
-    var categoryFormatted: String { category }
-    var dateFormatted: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d MMM"
-        formatter.locale = Locale(identifier: "ro_RO")
-        return formatter.string(from: date)
-    }
-}
-
-// MARK: - WalletViewModel
+// MARK: - WalletViewModel (CoreData wired)
 
 @MainActor
 final class WalletViewModel: ObservableObject {
 
-    @Published var obligations: [ObligationItem] = []
-    @Published var subscriptions: [SubscriptionItem] = []
-    @Published var transactions: [TransactionItem] = []
+    @Published var obligations: [Obligation] = []
+    @Published var subscriptions: [Subscription] = []
+    @Published var transactions: [SolomonCore.Transaction] = []
+
+    private var transactionRepo: (any TransactionRepository)?
+    private var obligationRepo: (any ObligationRepository)?
+    private var subscriptionRepo: (any SubscriptionRepository)?
+
+    func configure(persistence: SolomonPersistenceController) {
+        let ctx = persistence.container.viewContext
+        self.transactionRepo  = CoreDataTransactionRepository(context: ctx)
+        self.obligationRepo   = CoreDataObligationRepository(context: ctx)
+        self.subscriptionRepo = CoreDataSubscriptionRepository(context: ctx)
+    }
 
     func load() async {
-        obligations = [
-            ObligationItem(name: "Chirie", amount: 1500, dueDay: 1, iconName: "house.fill"),
-            ObligationItem(name: "Curent Enel (est.)", amount: 280, dueDay: 2, iconName: "bolt.fill"),
-            ObligationItem(name: "Internet Digi", amount: 65, dueDay: 5, iconName: "wifi"),
-            ObligationItem(name: "Sală fitness", amount: 150, dueDay: 10, iconName: "figure.run"),
-            ObligationItem(name: "Asigurare CASCO", amount: 171, dueDay: 15, iconName: "car.fill"),
-        ]
+        obligations  = (try? obligationRepo?.fetchAll()) ?? []
+        subscriptions = (try? subscriptionRepo?.fetchAll()) ?? []
+        transactions = (try? transactionRepo?.fetchRecent(limit: 50)) ?? []
+    }
 
-        subscriptions = [
-            SubscriptionItem(name: "Netflix", amount: 40, lastUsedDaysAgo: 5, isGhost: false),
-            SubscriptionItem(name: "Spotify", amount: 25, lastUsedDaysAgo: 2, isGhost: false),
-            SubscriptionItem(name: "HBO Max", amount: 35, lastUsedDaysAgo: 62, isGhost: true),
-            SubscriptionItem(name: "App Calm", amount: 29, lastUsedDaysAgo: 90, isGhost: true),
-            SubscriptionItem(name: "YouTube Premium", amount: 19, lastUsedDaysAgo: 1, isGhost: false),
-        ]
+    // MARK: - Computed totals
 
-        transactions = [
-            TransactionItem(merchant: "Glovo", amount: 87, category: "Livrare mâncare", emoji: "🛵", date: .now, isDebit: true),
-            TransactionItem(merchant: "Kaufland", amount: 134, category: "Supermarket", emoji: "🛒", date: .now.addingTimeInterval(-86400), isDebit: true),
-            TransactionItem(merchant: "Salariu", amount: 5200, category: "Venit", emoji: "💰", date: .now.addingTimeInterval(-172800), isDebit: false),
-            TransactionItem(merchant: "Uber", amount: 23, category: "Transport", emoji: "🚗", date: .now.addingTimeInterval(-259200), isDebit: true),
-            TransactionItem(merchant: "eMAG", amount: 319, category: "Shopping", emoji: "📦", date: .now.addingTimeInterval(-345600), isDebit: true),
-        ]
+    var obligationsTotalRON: Int {
+        obligations.reduce(0) { $0 + $1.amount.amount }
+    }
+
+    var obligationsTotalFormatted: String {
+        formatRON(obligationsTotalRON)
+    }
+
+    var obligationsPercentText: String {
+        // Heuristic: assuming midpoint salary ~5000 RON
+        guard obligationsTotalRON > 0 else { return "" }
+        let pct = Int(Double(obligationsTotalRON) / 5000.0 * 100)
+        return "\(pct)% din venit"
+    }
+
+    var obligationsKind: StatusBadge.Kind {
+        guard obligationsTotalRON > 0 else { return .neutral }
+        let pct = Double(obligationsTotalRON) / 5000.0
+        if pct < 0.4 { return .success }
+        if pct < 0.6 { return .warning }
+        return .danger
+    }
+
+    var subscriptionsTotalRON: Int {
+        subscriptions.reduce(0) { $0 + $1.amountMonthly.amount }
+    }
+
+    var subscriptionsTotalFormatted: String {
+        formatRON(subscriptionsTotalRON)
+    }
+
+    var ghostSavingsPotential: Int {
+        subscriptions.filter { $0.isGhost }.reduce(0) { $0 + $1.amountMonthly.amount }
+    }
+
+    private func formatRON(_ amount: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = "."
+        f.locale = Locale(identifier: "ro_RO")
+        let str = f.string(from: NSNumber(value: amount)) ?? "\(amount)"
+        return "\(str) RON"
     }
 }
 

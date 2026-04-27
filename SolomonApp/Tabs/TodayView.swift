@@ -1,5 +1,6 @@
 import SwiftUI
 import SolomonCore
+import SolomonStorage
 
 // MARK: - TodayView (Tab 1 — Azi)
 //
@@ -72,7 +73,10 @@ struct TodayView: View {
                 ManualTransactionView()
             }
         }
-        .task { await vm.load() }
+        .task {
+            vm.configure(persistence: SolomonPersistenceController.shared)
+            await vm.load()
+        }
     }
 
     // MARK: - Ingestion binding (read service, write clears it)
