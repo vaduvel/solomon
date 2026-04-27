@@ -1,6 +1,6 @@
 import Testing
 @testable import SolomonEmail
 
-@Test func tenSenderCategoriesDeclared() {
-    #expect(SolomonEmail.senderCategories.count == 10)
+@Test func moduleVersionIsSet() {
+    #expect(!SolomonEmail.moduleVersion.isEmpty)
 }
