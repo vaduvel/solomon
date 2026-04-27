@@ -1,5 +1,6 @@
 import Foundation
 import SolomonCore
+import SolomonLLM
 
 // MARK: - Candidates
 

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import SolomonMoments
 import SolomonCore
+import SolomonLLM
 
 // MARK: - Shared helpers
 

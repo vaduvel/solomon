@@ -1,6 +1,7 @@
 import Testing
 @testable import SolomonMoments
 import SolomonCore
+import SolomonLLM
 
 // MARK: - Smoke tests
 

@@ -1,27 +1,9 @@
 import Foundation
 import SolomonCore
+import SolomonLLM
 
-// MARK: - Protocol
-
-/// Abstracție peste LLM — permite injectarea unui MockLLMProvider în teste fără LLM real.
-///
-/// Contractul: primește system prompt + context JSON → returnează text în română,
-/// cel mult `maxWords` cuvinte.
-///
-/// Implementarea reală (MLX Swift / LiteRT-LM) va respecta același contract —
-/// decizia de runtime se ia la Faza 9.
-public protocol LLMProvider: Sendable {
-    func generate(systemPrompt: String, userContext: String, maxWords: Int) async throws -> String
-}
-
-// MARK: - Errors
-
-public enum LLMError: Error, Sendable {
-    case modelNotLoaded
-    case contextTooLong(charCount: Int)
-    case generationFailed(reason: String)
-    case timeout
-}
+// LLMProvider protocol și LLMError sunt definite în SolomonLLM — re-exportate implicit prin import.
+// Acest fișier conține doar MockLLMProvider pentru teste.
 
 // MARK: - Mock
 
@@ -55,12 +37,9 @@ public final class MockLLMProvider: LLMProvider, @unchecked Sendable {
 
         if let forced = forcedResponse { return forced }
 
-        // Răspuns auto-generat: extrage tipul din system prompt sau returnează un text generic
         let momentHint = extractMomentHint(from: systemPrompt)
         return "[\(momentHint)] Răspuns generat automat de MockLLMProvider pentru contextul furnizat."
     }
-
-    // MARK: - Private
 
     private func extractMomentHint(from prompt: String) -> String {
         for type in MomentType.allCases {
