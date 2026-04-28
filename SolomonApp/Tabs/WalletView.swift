@@ -499,7 +499,7 @@ final class WalletViewModel: ObservableObject {
     }
 
     var obligationsTotalFormatted: String {
-        formatRON(obligationsTotalRON)
+        RomanianMoneyFormatter.format(Money(obligationsTotalRON))
     }
 
     var obligationsPercentText: String {
@@ -522,20 +522,11 @@ final class WalletViewModel: ObservableObject {
     }
 
     var subscriptionsTotalFormatted: String {
-        formatRON(subscriptionsTotalRON)
+        RomanianMoneyFormatter.format(Money(subscriptionsTotalRON))
     }
 
     var ghostSavingsPotential: Int {
         subscriptions.filter { $0.isGhost }.reduce(0) { $0 + $1.amountMonthly.amount }
-    }
-
-    private func formatRON(_ amount: Int) -> String {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        f.groupingSeparator = "."
-        f.locale = Locale(identifier: "ro_RO")
-        let str = f.string(from: NSNumber(value: amount)) ?? "\(amount)"
-        return "\(str) RON"
     }
 }
 

@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var showProfileEdit = false
     @State private var showGoalsList = false
     @State private var showSpiralAlert = false
+    @State private var showEmailParser = false
     @State private var showDebugAlert: DebugAlertKind?
 
     enum DebugAlertKind: Identifiable {
@@ -74,6 +75,9 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showSpiralAlert) {
                 SpiralAlertView()
+            }
+            .sheet(isPresented: $showEmailParser) {
+                EmailParserSheet()
             }
             .onAppear {
                 vm.configure(persistence: SolomonPersistenceController.shared)
@@ -219,6 +223,10 @@ struct SettingsView: View {
             }
             .listRowBackground(Color.solSurface)
             .listRowSeparatorTint(Color.solBorder)
+
+            settingsRow(icon: "tray.and.arrow.down.fill", label: "Importă din email manual", value: nil) {
+                showEmailParser = true
+            }
 
             settingsToggleRow(
                 icon: "envelope.fill",

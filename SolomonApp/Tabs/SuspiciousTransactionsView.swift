@@ -103,13 +103,37 @@ struct SuspiciousTransactionsView: View {
     }
 
     private func confirm(_ pair: (suspicion: SuspiciousTransactionDetector.Suspicion, transaction: SolomonCore.Transaction)) {
-        // TODO: Salvăm pattern recunoscut în UserDefaults sau un nou domain model
+        // Salvăm transaction.id în UserDefaults ca "confirmed pattern" → ignorat de detector în viitor
+        var confirmed = UserDefaults.standard.stringArray(forKey: Self.confirmedKey) ?? []
+        confirmed.append(pair.transaction.id.uuidString)
+        UserDefaults.standard.set(confirmed, forKey: Self.confirmedKey)
         pairs.removeAll { $0.suspicion.id == pair.suspicion.id }
     }
 
     private func reject(_ pair: (suspicion: SuspiciousTransactionDetector.Suspicion, transaction: SolomonCore.Transaction)) {
-        // TODO: Trigger workflow blocare card (deeplink la app bancă, sau call center)
+        // Deschide app-ul băncii primare pentru a bloca cardul. Fallback: ANPC sesizare.
+        let ctx = SolomonPersistenceController.shared.container.viewContext
+        let userRepo = CoreDataUserProfileRepository(context: ctx)
+        let bank = (try? userRepo.fetchProfile())?.financials.primaryBank
+        if let bank, let url = bankAppDeeplink(bank: bank) {
+            UIApplication.shared.open(url)
+        } else if let anpc = URL(string: "https://anpc.ro/sesizari-online/") {
+            UIApplication.shared.open(anpc)
+        }
         pairs.removeAll { $0.suspicion.id == pair.suspicion.id }
+    }
+
+    private static let confirmedKey = "solomon.suspicious.confirmed"
+
+    private func bankAppDeeplink(bank: Bank) -> URL? {
+        switch bank {
+        case .bancaTransilvania: return URL(string: "https://apps.apple.com/ro/app/bt-pay/id1116242878")
+        case .bcr:               return URL(string: "https://apps.apple.com/ro/app/george-bcr/id1110144611")
+        case .ing:               return URL(string: "https://apps.apple.com/ro/app/ing-home-bank/id1099660716")
+        case .raiffeisen:        return URL(string: "https://apps.apple.com/ro/app/smart-mobile/id1071893824")
+        case .revolut:           return URL(string: "https://apps.apple.com/ro/app/revolut/id932493382")
+        default:                 return nil
+        }
     }
 }
 

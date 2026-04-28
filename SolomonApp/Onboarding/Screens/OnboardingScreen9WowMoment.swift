@@ -1,4 +1,5 @@
 import SwiftUI
+import SolomonCore
 
 // MARK: - Ecran 9 — Wow Moment
 //
@@ -111,10 +112,7 @@ struct OnboardingScreen9WowMoment: View {
     }
 
     private var safeToSpendFormatted: String {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        f.groupingSeparator = "."
-        return (f.string(from: NSNumber(value: safeToSpendValue)) ?? "0") + " RON"
+        RomanianMoneyFormatter.format(Money(safeToSpendValue))
     }
 
     private var perDay: Int {
