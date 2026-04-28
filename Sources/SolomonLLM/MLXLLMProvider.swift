@@ -51,6 +51,17 @@ public actor MLXLLMProvider: LLMProvider {
             topP: 0.9
         )
 
+        /// Gemma 3 4B — raport calitate/RAM optim: mai bun decât 2B, accesibil pe iPhone 15 Pro+.
+        /// Model: mlx-community/gemma-3-4b-it-4bit (~2.8 GB)
+        public static let gemma3_4b = Config(
+            modelId: "mlx-community/gemma-3-4b-it-4bit",
+            displayName: "Gemma 3 (4B)",
+            approximateSizeBytes: 2_800_000_000,
+            maxTokens: 220,
+            temperature: 0.4,
+            topP: 0.9
+        )
+
         public init(
             modelId: String,
             displayName: String,

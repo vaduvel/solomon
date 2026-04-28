@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 import SolomonCore
 import SolomonStorage
 import SolomonAnalytics
@@ -141,9 +142,17 @@ final class TodayViewModel: ObservableObject {
             goals: goals
         )
 
+        // Verifică ce moment ar fi selectat (pentru unread badge + push critic)
+        let selectedType = momentEngine.selectedType(snapshot: snapshot)
+        hasUnreadAlert = selectedType == .spiralAlert || selectedType == .upcomingObligation || selectedType == .payday
+
         do {
             if let output = try await momentEngine.generateBestMoment(snapshot: snapshot) {
                 currentMoment = DisplayMoment.from(output)
+                // Push critic dacă app e în foreground și momentul e urgency-high
+                if let type = selectedType, isCriticalMomentType(type) {
+                    await BackgroundTaskService.shared.sendPushNotification(for: type)
+                }
             } else {
                 currentMoment = nil
             }
@@ -189,6 +198,14 @@ final class TodayViewModel: ObservableObject {
         case 12..<18: return "Bună ziua"
         case 18..<22: return "Bună seara"
         default:      return "Salut"
+        }
+    }
+
+    /// True pentru momentele care justifică o notificare push chiar dacă app-ul e foreground.
+    private func isCriticalMomentType(_ type: MomentType) -> Bool {
+        switch type {
+        case .spiralAlert, .upcomingObligation: return true
+        default: return false
         }
     }
 }
