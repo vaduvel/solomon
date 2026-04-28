@@ -42,10 +42,10 @@ struct GoalEditView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, SolSpacing.lg)
 
-                        // Tip
+                        // Tip — picker stil HIG
                         VStack(alignment: .leading, spacing: SolSpacing.sm) {
                             sectionLabel("TIP OBIECTIV")
-                            FlowLayout(spacing: SolSpacing.sm) {
+                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: SolSpacing.sm) {
                                 ForEach(GoalKind.allCases, id: \.self) { k in
                                     SelectableChip(
                                         title: k.displayNameRO,

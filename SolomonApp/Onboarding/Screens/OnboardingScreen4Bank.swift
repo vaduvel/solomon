@@ -1,40 +1,43 @@
 import SwiftUI
 import SolomonCore
 
-// MARK: - Ecran 4 — Bancă principală (15 sec)
-//
-// Conform spec §11 ecran 4:
-//   - Întrebare: "La ce bancă ai contul principal?"
-//   - Chips: BT / BCR / ING / Raiffeisen / Revolut / [Altă]
+// MARK: - Ecran 4 — Bancă principală (HIG aligned)
 
 struct OnboardingScreen4Bank: View {
     @EnvironmentObject var state: OnboardingState
 
     var body: some View {
-        VStack(spacing: SolSpacing.xl) {
-            VStack(alignment: .leading, spacing: SolSpacing.sm) {
-                Text("Banca ta principală")
-                    .font(.solH1)
-                    .foregroundStyle(Color.solForeground)
-                Text("Selectează banca unde îți intră salariul.")
-                    .font(.solBody)
-                    .foregroundStyle(Color.solMuted)
+        ScrollView {
+            VStack(alignment: .leading, spacing: SolSpacing.xxl) {
+
+                VStack(alignment: .leading, spacing: SolSpacing.xs) {
+                    Text("Banca ta principală")
+                        .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(Color.solForeground)
+                    Text("Selectează banca unde îți intră salariul.")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, SolSpacing.lg)
+
+                BankPicker(selectedBank: $state.primaryBank)
+
+                Spacer(minLength: SolSpacing.lg)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, SolSpacing.lg)
-
-            BankPicker(selectedBank: $state.primaryBank)
-
-            Spacer()
-
+            .padding(.horizontal, SolSpacing.lg)
+            .padding(.bottom, SolSpacing.xxxl)
+        }
+        .safeAreaInset(edge: .bottom) {
             SolomonButton("Continuă", icon: "arrow.right") {
+                Haptics.medium()
                 state.next()
             }
             .opacity(state.canProceedFromCurrentStep ? 1 : 0.4)
             .disabled(!state.canProceedFromCurrentStep)
+            .padding(.horizontal, SolSpacing.lg)
+            .padding(.vertical, SolSpacing.base)
+            .background(.ultraThinMaterial)
         }
-        .padding(.horizontal, SolSpacing.screenHorizontal)
-        .padding(.bottom, SolSpacing.xl)
     }
 }
 

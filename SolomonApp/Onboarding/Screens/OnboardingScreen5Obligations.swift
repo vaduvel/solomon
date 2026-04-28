@@ -1,80 +1,96 @@
 import SwiftUI
 import SolomonCore
 
-// MARK: - Ecran 5 — Obligații cunoscute (60 sec)
+// MARK: - Ecran 5 — Obligații cunoscute (HIG aligned)
 //
-// Conform spec §11 ecran 5:
-//   - Titlu: "Ce plăți știi că ai lunar?"
-//   - Subtitle: "Solomon le va găsi automat din email."
-//   - Buton "+": adăugare rapidă
-//   - Buton: "Sări peste, le găsește Solomon"
+// Pattern: List + plus button + skip option.
 
 struct OnboardingScreen5Obligations: View {
     @EnvironmentObject var state: OnboardingState
 
     var body: some View {
-        VStack(spacing: SolSpacing.lg) {
-            VStack(alignment: .leading, spacing: SolSpacing.sm) {
-                Text("Plățile tale lunare")
-                    .font(.solH1)
-                    .foregroundStyle(Color.solForeground)
-                Text("Solomon le va găsi automat din email. Adaugă acum doar ce-ți amintești — chirie, abonamente, rate.")
-                    .font(.solBody)
-                    .foregroundStyle(Color.solMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, SolSpacing.lg)
+        ScrollView {
+            VStack(alignment: .leading, spacing: SolSpacing.xl) {
 
-            ScrollView {
-                VStack(spacing: SolSpacing.sm) {
-                    ForEach($state.draftObligations) { $draft in
-                        DraftObligationRow(draft: $draft) {
-                            state.removeDraftObligation(draft.id)
-                        }
-                    }
+                VStack(alignment: .leading, spacing: SolSpacing.xs) {
+                    Text("Plățile tale lunare")
+                        .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(Color.solForeground)
+                    Text("Solomon le va găsi automat din email. Adaugă acum doar ce-ți amintești.")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, SolSpacing.lg)
 
-                    Button {
-                        state.addDraftObligation()
-                    } label: {
-                        HStack {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 18))
-                                .foregroundStyle(Color.solPrimary)
-                            Text("Adaugă o plată recurentă")
-                                .font(.solBody)
-                                .foregroundStyle(Color.solPrimary)
-                            Spacer()
+                if state.draftObligations.isEmpty {
+                    EmptyStateView(
+                        icon: "list.bullet.rectangle",
+                        title: "Nicio plată adăugată",
+                        subtitle: "Adaugă chiria, abonamentele și ratele dacă le știi.",
+                        cta: .init(title: "Adaugă plată", icon: "plus") {
+                            Haptics.light()
+                            state.addDraftObligation()
                         }
-                        .padding(SolSpacing.base)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.solPrimary.opacity(0.10))
-                        .clipShape(RoundedRectangle(cornerRadius: SolRadius.xl, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: SolRadius.xl, style: .continuous)
-                                .stroke(Color.solPrimary.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [4]))
-                        )
+                    )
+                    .solCard()
+                } else {
+                    VStack(spacing: SolSpacing.sm) {
+                        ForEach($state.draftObligations) { $draft in
+                            DraftObligationRow(draft: $draft) {
+                                Haptics.warning()
+                                state.removeDraftObligation(draft.id)
+                            }
+                        }
+
+                        Button {
+                            Haptics.light()
+                            state.addDraftObligation()
+                        } label: {
+                            HStack {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.body)
+                                    .foregroundStyle(Color.solPrimary)
+                                Text("Adaugă încă o plată")
+                                    .font(.body)
+                                    .foregroundStyle(Color.solPrimary)
+                                Spacer()
+                            }
+                            .padding(.horizontal, SolSpacing.base)
+                            .frame(height: 50)
+                            .background(Color.solPrimary.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: SolRadius.lg))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-            }
 
+                Spacer(minLength: SolSpacing.lg)
+            }
+            .padding(.horizontal, SolSpacing.lg)
+            .padding(.bottom, SolSpacing.xxxl)
+        }
+        .safeAreaInset(edge: .bottom) {
             VStack(spacing: SolSpacing.sm) {
                 SolomonButton("Continuă", icon: "arrow.right") {
+                    Haptics.medium()
                     state.next()
                 }
                 if state.draftObligations.isEmpty {
-                    SolomonButton("Sări peste, le găsește Solomon", style: .ghost) {
+                    Button("Sări peste, le găsește Solomon") {
+                        Haptics.light()
                         state.next()
                     }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 }
             }
+            .padding(.horizontal, SolSpacing.lg)
+            .padding(.vertical, SolSpacing.base)
+            .background(.ultraThinMaterial)
         }
-        .padding(.horizontal, SolSpacing.screenHorizontal)
-        .padding(.bottom, SolSpacing.xl)
     }
 }
-
-// MARK: - Draft obligation row
 
 private struct DraftObligationRow: View {
     @Binding var draft: OnboardingState.DraftObligation
@@ -82,7 +98,7 @@ private struct DraftObligationRow: View {
 
     var body: some View {
         VStack(spacing: SolSpacing.sm) {
-            HStack(spacing: SolSpacing.sm) {
+            HStack {
                 Picker("Tip", selection: $draft.kind) {
                     ForEach(ObligationKind.allCases, id: \.self) { k in
                         Text(k.displayNameRO).tag(k)
@@ -93,37 +109,44 @@ private struct DraftObligationRow: View {
 
                 Spacer()
 
-                Button(action: onDelete) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundStyle(Color.solMuted)
+                Button {
+                    onDelete()
+                } label: {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(Color.solDestructive)
+                        .symbolRenderingMode(.hierarchical)
                 }
             }
 
             HStack(spacing: SolSpacing.sm) {
                 TextField("Nume (ex: Netflix)", text: $draft.name)
-                    .font(.solBody)
-                    .foregroundStyle(Color.solForeground)
+                    .font(.body)
                     .padding(.horizontal, SolSpacing.md)
-                    .padding(.vertical, 10)
+                    .frame(height: 44)
                     .background(Color.solSecondary)
                     .clipShape(RoundedRectangle(cornerRadius: SolRadius.lg))
 
-                TextField("Sumă RON", value: $draft.amountRON, format: .number)
-                    .font(.solBody)
-                    .foregroundStyle(Color.solForeground)
+                TextField("Sumă", value: $draft.amountRON, format: .number)
+                    .font(.body)
                     .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
                     .padding(.horizontal, SolSpacing.md)
-                    .padding(.vertical, 10)
+                    .frame(width: 90, height: 44)
                     .background(Color.solSecondary)
                     .clipShape(RoundedRectangle(cornerRadius: SolRadius.lg))
-                    .frame(width: 90)
+            }
 
-                Stepper("Z. \(draft.dayOfMonth)", value: $draft.dayOfMonth, in: 1...31)
+            HStack {
+                Text("Ziua")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Stepper("Ziua \(draft.dayOfMonth)", value: $draft.dayOfMonth, in: 1...31)
                     .labelsHidden()
                 Text("\(draft.dayOfMonth)")
-                    .font(.solCaption)
-                    .foregroundStyle(Color.solMuted)
+                    .font(.body.monospacedDigit())
+                    .foregroundStyle(Color.solForeground)
+                Spacer()
             }
         }
         .padding(SolSpacing.base)
@@ -135,14 +158,7 @@ private struct DraftObligationRow: View {
     ZStack {
         Color.solCanvas.ignoresSafeArea()
         OnboardingScreen5Obligations()
-            .environmentObject({
-                let s = OnboardingState()
-                s.addDraftObligation()
-                s.draftObligations[0].name = "Netflix"
-                s.draftObligations[0].amountRON = 39
-                s.draftObligations[0].kind = .subscription
-                return s
-            }())
+            .environmentObject(OnboardingState())
     }
     .preferredColorScheme(.dark)
 }

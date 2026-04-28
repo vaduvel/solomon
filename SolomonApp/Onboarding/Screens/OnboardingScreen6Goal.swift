@@ -1,53 +1,39 @@
 import SwiftUI
 
-// MARK: - Ecran 6 — Obiectiv (20 sec)
-//
-// Conform spec §11 ecran 6:
-//   - "Ce vrei să rezolvi cu Solomon?"
-//   - Multi-select chips
-//   - Câmp opțional: "Ai un obiectiv mare?"
+// MARK: - Ecran 6 — Obiectiv (HIG aligned)
 
 struct OnboardingScreen6Goal: View {
     @EnvironmentObject var state: OnboardingState
 
     var body: some View {
         ScrollView {
-            VStack(spacing: SolSpacing.xl) {
-                VStack(alignment: .leading, spacing: SolSpacing.sm) {
-                    Text("Ce vrei să rezolvi cu Solomon?")
-                        .font(.solH1)
+            VStack(alignment: .leading, spacing: SolSpacing.xxl) {
+
+                VStack(alignment: .leading, spacing: SolSpacing.xs) {
+                    Text("Ce vrei să rezolvi?")
+                        .font(.largeTitle.weight(.bold))
                         .foregroundStyle(Color.solForeground)
                     Text("Selectează tot ce ți se aplică.")
-                        .font(.solBody)
-                        .foregroundStyle(Color.solMuted)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, SolSpacing.lg)
 
-                // Multi-select chips
-                FlowLayout(spacing: SolSpacing.sm) {
+                // Goal options as native list-style toggles
+                VStack(spacing: SolSpacing.sm) {
                     ForEach(OnboardingState.GoalChip.allCases, id: \.self) { chip in
-                        MultiSelectChip(
-                            title: chip.rawValue,
-                            isSelected: state.selectedGoals.contains(chip)
-                        ) {
-                            if state.selectedGoals.contains(chip) {
-                                state.selectedGoals.remove(chip)
-                            } else {
-                                state.selectedGoals.insert(chip)
-                            }
-                        }
+                        goalRow(chip: chip)
                     }
                 }
 
-                // Big goal opțional
+                // Big goal optional
                 VStack(alignment: .leading, spacing: SolSpacing.sm) {
-                    Text("Ai un obiectiv mare? (opțional)")
-                        .font(.solBodyBold)
+                    Text("Ai un obiectiv mare?")
+                        .font(.headline)
                         .foregroundStyle(Color.solForeground)
                     Text("Vacanță, mașină, casă...")
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solMuted)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
 
                     SolomonTextInput(
                         placeholder: "ex: Vacanță în Grecia",
@@ -56,58 +42,56 @@ struct OnboardingScreen6Goal: View {
                     )
                 }
 
-                Spacer().frame(height: SolSpacing.lg)
-
-                SolomonButton("Continuă", icon: "arrow.right") {
-                    state.next()
-                }
-                .opacity(state.canProceedFromCurrentStep ? 1 : 0.4)
-                .disabled(!state.canProceedFromCurrentStep)
+                Spacer(minLength: SolSpacing.lg)
             }
-            .padding(.horizontal, SolSpacing.screenHorizontal)
-            .padding(.bottom, SolSpacing.xl)
+            .padding(.horizontal, SolSpacing.lg)
+            .padding(.bottom, SolSpacing.xxxl)
         }
-    }
-}
-
-// MARK: - FlowLayout (helper pentru wrapping chips)
-
-struct FlowLayout: Layout {
-    let spacing: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let result = arrange(proposal: proposal, subviews: subviews)
-        return result.size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let result = arrange(proposal: proposal, subviews: subviews)
-        for (offset, subview) in zip(result.offsets, subviews) {
-            subview.place(at: CGPoint(x: bounds.minX + offset.x, y: bounds.minY + offset.y), proposal: .unspecified)
-        }
-    }
-
-    private func arrange(proposal: ProposedViewSize, subviews: Subviews) -> (offsets: [CGPoint], size: CGSize) {
-        let maxWidth = proposal.width ?? .infinity
-        var offsets: [CGPoint] = []
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var totalWidth: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > maxWidth && x > 0 {
-                x = 0
-                y += rowHeight + spacing
-                rowHeight = 0
+        .safeAreaInset(edge: .bottom) {
+            SolomonButton("Continuă", icon: "arrow.right") {
+                Haptics.medium()
+                state.next()
             }
-            offsets.append(CGPoint(x: x, y: y))
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-            totalWidth = max(totalWidth, x)
+            .opacity(state.canProceedFromCurrentStep ? 1 : 0.4)
+            .disabled(!state.canProceedFromCurrentStep)
+            .padding(.horizontal, SolSpacing.lg)
+            .padding(.vertical, SolSpacing.base)
+            .background(.ultraThinMaterial)
         }
-        return (offsets, CGSize(width: totalWidth, height: y + rowHeight))
+    }
+
+    @ViewBuilder
+    private func goalRow(chip: OnboardingState.GoalChip) -> some View {
+        let isSelected = state.selectedGoals.contains(chip)
+        Button {
+            Haptics.selection()
+            if isSelected {
+                state.selectedGoals.remove(chip)
+            } else {
+                state.selectedGoals.insert(chip)
+            }
+        } label: {
+            HStack(spacing: SolSpacing.md) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isSelected ? Color.solPrimary : Color.solMuted)
+                    .symbolRenderingMode(.hierarchical)
+                Text(chip.rawValue)
+                    .font(.body)
+                    .foregroundStyle(Color.solForeground)
+                    .multilineTextAlignment(.leading)
+                Spacer()
+            }
+            .padding(SolSpacing.base)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isSelected ? Color.solPrimary.opacity(0.08) : Color.solCard)
+            .clipShape(RoundedRectangle(cornerRadius: SolRadius.lg))
+            .overlay(
+                RoundedRectangle(cornerRadius: SolRadius.lg)
+                    .stroke(isSelected ? Color.solPrimary.opacity(0.4) : Color.solBorder, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -117,7 +101,7 @@ struct FlowLayout: Layout {
         OnboardingScreen6Goal()
             .environmentObject({
                 let s = OnboardingState()
-                s.selectedGoals = [.noZeroOn22, .saveMonthly]
+                s.selectedGoals = [.noZeroOn22]
                 return s
             }())
     }
