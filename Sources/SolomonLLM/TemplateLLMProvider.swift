@@ -125,11 +125,18 @@ public final class TemplateLLMProvider: LLMProvider, @unchecked Sendable {
         let available = (allocation?["available_to_spend"] as? Int) ?? 0
         let perDay = (allocation?["available_per_day"] as? Int) ?? 0
 
-        var lines: [String] = []
-        lines.append("Salariul a intrat: \(amount) RON. ")
-        lines.append("\(obligations) RON merg pe obligații. ")
+        let salutStr = formal
+            ? "Salariul dumneavoastră a intrat: \(amount) RON."
+            : "Salariul a intrat: \(amount) RON."
+        let obligStr = formal
+            ? "\(obligations) RON merg pe obligații."
+            : "\(obligations) RON merg pe obligații."
+        var lines: [String] = [salutStr, " \(obligStr)"]
         if available > 0 && perDay > 0 {
-            lines.append("Rămân \(available) RON disponibili — \(perDay) RON pe zi.")
+            let ramStr = formal
+                ? " Vă rămân \(available) RON disponibili — \(perDay) RON pe zi."
+                : " Rămân \(available) RON disponibili — \(perDay) RON pe zi."
+            lines.append(ramStr)
         }
         return lines.joined()
     }
@@ -142,8 +149,9 @@ public final class TemplateLLMProvider: LLMProvider, @unchecked Sendable {
         let amount = (upcoming?["amount"] as? Int) ?? 0
         let daysUntil = (upcoming?["days_until_due"] as? Int) ?? 0
 
+        let adv = formal ? "Aveți" : "Ai"
         if daysUntil == 0 {
-            return "\(name), \(oblName) (\(amount) RON) e scadent astăzi."
+            return "\(name), \(oblName) (\(amount) RON) e scadent astăzi. \(adv) fondurile necesare?"
         }
         if daysUntil == 1 {
             return "\(name), \(oblName) (\(amount) RON) e scadent mâine."
@@ -159,8 +167,10 @@ public final class TemplateLLMProvider: LLMProvider, @unchecked Sendable {
         let percentage = (pattern?["percentage_of_total"] as? Int) ?? 0
         let amount = (pattern?["amount_total"] as? Int) ?? 0
 
+        let verb = formal ? "reprezintă" : "reprezintă"
+        let pron = formal ? "dumneavoastră" : "tale"
         if percentage > 0 && amount > 0 {
-            return "\(name), \(category) reprezintă \(percentage)% din cheltuielile tale (\(amount) RON). Media obișnuită e mai mică."
+            return "\(name), \(category) \(verb) \(percentage)% din cheltuielile \(pron) (\(amount) RON). Media obișnuită e mai mică."
         }
         return "\(name), Solomon a observat un tipar nou la \(category)."
     }
@@ -173,25 +183,32 @@ public final class TemplateLLMProvider: LLMProvider, @unchecked Sendable {
         let ghosts = ctx["ghost_subscriptions"] as? [[String: Any]] ?? []
         let savings = ghosts.reduce(0) { $0 + ((($1["amount_monthly"]) as? Int) ?? 0) }
 
+        let pron = formal ? "dumneavoastră" : "tale"
+        let verb = formal ? "Anulați-le" : "Anulează-le"
         if ghosts.isEmpty {
-            return "\(name), abonamentele tale sunt în regulă — \(monthly) RON/lună, toate folosite."
+            return "\(name), abonamentele \(pron) sunt în regulă — \(monthly) RON/lună, toate folosite."
         }
         let plural = ghosts.count == 1 ? "abonament fantomă" : "abonamente fantomă"
-        return "\(name), \(ghosts.count) \(plural) îți consumă \(savings) RON/lună. Anulează-le și economisești \(savings * 12) RON pe an."
+        let consum = formal ? "vă consumă" : "îți consumă"
+        return "\(name), \(ghosts.count) \(plural) \(consum) \(savings) RON/lună. \(verb) și economisiți \(savings * 12) RON pe an."
     }
 
     // MARK: - Spiral Alert
 
     private func renderSpiralAlert(_ ctx: [String: Any], name: String, formal: Bool) -> String {
         let severity = (ctx["severity"] as? String) ?? "medium"
-        let summary = (ctx["narrative_summary"] as? String) ?? "Soldul tău scade lună de lună."
+        let rawSummary = (ctx["narrative_summary"] as? String) ?? "Soldul scade lună de lună."
+        // Adaptăm pronumele din summary dacă e formal
+        let summary = formal
+            ? rawSummary.replacingOccurrences(of: "tău", with: "dumneavoastră")
+                        .replacingOccurrences(of: "tăi", with: "dumneavoastră")
+            : rawSummary
         let plan = ctx["recovery_plan"] as? [String: Any]
         let step1 = plan?["step1"] as? [String: Any]
-        let action1 = (step1?["action"] as? String) ?? "Anulează cel mai mare abonament nefolosit"
-
+        let action1 = (step1?["action"] as? String) ?? "Anulați cel mai mare abonament nefolosit"
+        let primulPas = formal ? "Primul pas recomandat" : "Primul pas"
         let csalbRelevant = (ctx["csalb_relevant"] as? Bool) ?? false
-        var msg = "\(name), atenție: \(summary) Primul pas: \(action1)."
-
+        var msg = "\(name), atenție: \(summary) \(primulPas): \(action1)."
         if severity == "high" || severity == "critical", csalbRelevant {
             msg += " CSALB poate media gratuit cu băncile/IFN-urile."
         }
@@ -206,7 +223,8 @@ public final class TemplateLLMProvider: LLMProvider, @unchecked Sendable {
         let smallWin = ctx["small_win"] as? [String: Any]
         let winText = (smallWin?["text"] as? String)
 
-        var msg = "\(name), săptămâna asta ai cheltuit \(total) RON."
+        let verb = formal ? "ați cheltuit" : "ai cheltuit"
+        var msg = "\(name), săptămâna asta \(verb) \(total) RON."
         if let winText, !winText.isEmpty {
             msg += " \(winText)"
         }
@@ -218,9 +236,9 @@ public final class TemplateLLMProvider: LLMProvider, @unchecked Sendable {
     private func greeting(formal: Bool) -> String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
-        case 5..<12:  return formal ? "Bună dimineața" : "Bună dimineața"
+        case 5..<12:  return "Bună dimineața"          // neutru RO — identic pt ambele
         case 12..<18: return formal ? "Bună ziua" : "Salut"
-        case 18..<22: return formal ? "Bună seara" : "Bună seara"
+        case 18..<22: return "Bună seara"              // neutru RO — identic pt ambele
         default:      return formal ? "Salutare" : "Salut"
         }
     }

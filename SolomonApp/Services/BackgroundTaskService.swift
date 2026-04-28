@@ -26,8 +26,8 @@ final class BackgroundTaskService {
 
     static let shared = BackgroundTaskService()
 
-    static let taskIdRefresh = "ro.solomon.app.moment.refresh"
-    static let taskIdWeekly  = "ro.solomon.app.moment.weekly"
+    nonisolated static let taskIdRefresh = "ro.solomon.app.moment.refresh"
+    nonisolated static let taskIdWeekly  = "ro.solomon.app.moment.weekly"
 
     private let persistence = SolomonPersistenceController.shared
 
@@ -40,8 +40,10 @@ final class BackgroundTaskService {
             forTaskWithIdentifier: Self.taskIdRefresh,
             using: nil
         ) { task in
+            // BGTask nu e Sendable în Swift 6 — nonisolated(unsafe) e escape hatch aprobat
+            nonisolated(unsafe) let t = task as! BGAppRefreshTask
             Task { @MainActor in
-                await BackgroundTaskService.shared.handleRefresh(task: task as! BGAppRefreshTask)
+                await BackgroundTaskService.shared.handleRefresh(task: t)
             }
         }
 
@@ -49,8 +51,9 @@ final class BackgroundTaskService {
             forTaskWithIdentifier: Self.taskIdWeekly,
             using: nil
         ) { task in
+            nonisolated(unsafe) let t = task as! BGProcessingTask
             Task { @MainActor in
-                await BackgroundTaskService.shared.handleWeekly(task: task as! BGProcessingTask)
+                await BackgroundTaskService.shared.handleWeekly(task: t)
             }
         }
     }

@@ -13,6 +13,7 @@ struct TodayView: View {
     @ObservedObject private var ingestion = NotificationIngestionService.shared
     @State private var showManualEntry = false
     @State private var showCanIAfford = false
+    @State private var showAlerts = false
 
     var body: some View {
         NavigationStack {
@@ -28,8 +29,15 @@ struct TodayView: View {
                     // Quick action — Pot?
                     canIAffordCTA
 
+                    // Budget tight warning
+                    if vm.isBudgetTight {
+                        tightBudgetBanner
+                    }
+
                     // Current moment (Solomon AI insight)
-                    if let moment = vm.currentMoment {
+                    if vm.isLoadingMoment {
+                        momentLoadingPlaceholder
+                    } else if let moment = vm.currentMoment {
                         VStack(alignment: .leading, spacing: SolSpacing.sm) {
                             Text("Solomon spune")
                                 .solSectionHeader()
@@ -38,6 +46,11 @@ struct TodayView: View {
                             MomentCard(moment: moment)
                                 .padding(.horizontal, SolSpacing.lg)
                         }
+                    }
+
+                    // Recent moments history
+                    if vm.recentMoments.count > 1 {
+                        recentMomentsSection
                     }
 
                     Spacer(minLength: SolSpacing.xxxl)
@@ -61,6 +74,8 @@ struct TodayView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         Haptics.light()
+                        showAlerts = true
+                        vm.hasUnreadAlert = false
                     } label: {
                         Image(systemName: vm.hasUnreadAlert ? "bell.badge.fill" : "bell")
                             .font(.body)
@@ -75,6 +90,10 @@ struct TodayView: View {
             }
             .sheet(isPresented: $showCanIAfford) {
                 CanIAffordSheet().solStandardSheet()
+            }
+            .sheet(isPresented: $showAlerts) {
+                AlertsSheet(moments: vm.recentMoments, currentMoment: vm.currentMoment)
+                    .solStandardSheet()
             }
         }
         .task {
@@ -164,6 +183,92 @@ struct TodayView: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal, SolSpacing.lg)
+    }
+
+    // MARK: - Budget tight banner
+
+    @ViewBuilder
+    private var tightBudgetBanner: some View {
+        HStack(spacing: SolSpacing.sm) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(Color.solWarning)
+                .font(.subheadline)
+            Text("Buget strâns — grijă la cheltuieli mici")
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(Color.solWarning)
+            Spacer()
+        }
+        .padding(.horizontal, SolSpacing.base)
+        .padding(.vertical, SolSpacing.sm)
+        .background(Color.solWarning.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: SolRadius.lg, style: .continuous))
+        .padding(.horizontal, SolSpacing.lg)
+    }
+
+    // MARK: - Moment loading placeholder
+
+    @ViewBuilder
+    private var momentLoadingPlaceholder: some View {
+        VStack(alignment: .leading, spacing: SolSpacing.sm) {
+            Text("Solomon spune")
+                .solSectionHeader()
+                .padding(.horizontal, SolSpacing.lg)
+
+            RoundedRectangle(cornerRadius: SolRadius.xl, style: .continuous)
+                .fill(Color.solCard)
+                .frame(height: 120)
+                .overlay(
+                    HStack(spacing: SolSpacing.sm) {
+                        ProgressView()
+                            .tint(Color.solPrimary)
+                        Text("Analizez datele tale…")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.solMuted)
+                    }
+                )
+                .padding(.horizontal, SolSpacing.lg)
+        }
+    }
+
+    // MARK: - Recent moments
+
+    @ViewBuilder
+    private var recentMomentsSection: some View {
+        VStack(alignment: .leading, spacing: SolSpacing.sm) {
+            Text("Istoric")
+                .solSectionHeader()
+                .padding(.horizontal, SolSpacing.lg)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: SolSpacing.sm) {
+                    ForEach(vm.recentMoments.dropFirst()) { moment in
+                        VStack(alignment: .leading, spacing: SolSpacing.xs) {
+                            HStack(spacing: SolSpacing.xs) {
+                                Image(systemName: moment.systemIconName)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(moment.accentColor)
+                                Text(moment.timeAgoString)
+                                    .font(.caption)
+                                    .foregroundStyle(Color.solMuted)
+                            }
+                            Text(moment.title)
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(Color.solForeground)
+                                .lineLimit(1)
+                            Text(moment.llmResponse)
+                                .font(.caption)
+                                .foregroundStyle(Color.solMuted)
+                                .lineLimit(2)
+                        }
+                        .padding(SolSpacing.base)
+                        .frame(width: 200)
+                        .background(Color.solCard)
+                        .clipShape(RoundedRectangle(cornerRadius: SolRadius.lg, style: .continuous))
+                    }
+                }
+                .padding(.horizontal, SolSpacing.lg)
+            }
+        }
     }
 
     // MARK: - Ingestion binding

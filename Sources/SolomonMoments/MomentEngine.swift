@@ -2,6 +2,7 @@ import Foundation
 import SolomonCore
 import SolomonAnalytics
 import SolomonLLM
+// LLMOutputValidator e în SolomonLLM
 
 // MARK: - MomentEngine
 //
@@ -20,6 +21,7 @@ public final class MomentEngine {
     private let subscriptionAuditor = SubscriptionAuditor()
     private let spiralDetector = SpiralDetector()
     private let patternDetector = PatternDetector()
+    private let validator = LLMOutputValidator()
 
     public init(llm: any LLMProvider = MomentEngine.defaultLLMProvider()) {
         self.llm = llm
@@ -64,7 +66,24 @@ public final class MomentEngine {
     public func generateBestMoment(snapshot: Snapshot) async throws -> MomentOutput? {
         let candidates = buildCandidates(snapshot: snapshot)
         guard candidates.hasAnyCandidate else { return nil }
-        return try await orchestrator.generate(from: candidates, using: llm)
+
+        // Prima încercare cu provider-ul curent
+        let initial = try await orchestrator.generate(from: candidates, using: llm)
+
+        // Validare §7.3 — dacă eșuează retry cu TemplateLLMProvider (fallback garantat valid)
+        let validation = validator.validate(
+            output: initial.llmResponse,
+            criticalNumbers: [],    // orchestratorul nu expune numerele critice direct; validăm RO + length
+            maxWords: 150
+        )
+        if !validation.passed {
+            // Retry cu template safe — garantat RO, fără English bleed
+            if let retried = try? await orchestrator.generate(from: candidates, using: TemplateLLMProvider()) {
+                return retried
+            }
+        }
+
+        return initial
     }
 
     public func selectedType(snapshot: Snapshot) -> MomentType? {
@@ -211,10 +230,37 @@ public final class MomentEngine {
             availablePerDay: perDay
         )
 
+        // Comparație cu luna trecută: reconstructăm available-ul lunii precedente
+        let lastMonthAvailable: Money = {
+            let cal = Calendar.current
+            let now = snapshot.referenceDate
+            guard let prevMonthStart = cal.date(byAdding: .month, value: -1, to:
+                    cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now),
+                  let prevMonthEnd = cal.date(byAdding: .month, value: 1, to: prevMonthStart)
+            else { return available }
+
+            let prevIncoming = snapshot.transactions
+                .filter { $0.isIncoming && $0.date >= prevMonthStart && $0.date < prevMonthEnd }
+                .reduce(0) { $0 + $1.amount.amount }
+            let prevOutgoing = snapshot.transactions
+                .filter { $0.isOutgoing && $0.date >= prevMonthStart && $0.date < prevMonthEnd }
+                .reduce(0) { $0 + $1.amount.amount }
+            let prevBalance = prevIncoming - prevOutgoing - obligTotal.amount - subTotal.amount
+            return Money(max(0, prevBalance))
+        }()
+
+        let rawDiff = available.amount - lastMonthAvailable.amount
+        let direction: ComparisonDirection
+        switch rawDiff {
+        case 100...:    direction = .better
+        case ..<(-100): direction = .worse
+        default:        direction = .same
+        }
+
         let comparisons = PaydayComparisons(
-            vsLastMonthAvailable: available,
-            vsLastMonthDiff: Money(0),
-            vsLastMonthDirection: .same
+            vsLastMonthAvailable: lastMonthAvailable,
+            vsLastMonthDiff: Money(abs(rawDiff)),
+            vsLastMonthDirection: direction
         )
 
         let budgets = cashFlow.spendingByCategory
@@ -687,12 +733,34 @@ public final class MomentEngine {
             extraIncomeAvg: snapshot.userProfile?.financials.secondaryIncomeAvg
         )
 
+        // cardCreditUsed: obligație de tip bancară (credit card) sau tranzacție cu "credit" în merchant
+        let cardCreditUsed: Bool = {
+            let hasLoanObligation = snapshot.obligations.contains { $0.kind == .loanBank }
+            let hasCreditMerchant = snapshot.transactions.contains { tx in
+                guard let m = tx.merchant?.lowercased() else { return false }
+                return m.contains("credit") || m.contains("card")
+            }
+            return hasLoanObligation || hasCreditMerchant
+        }()
+
+        // overdraftUsedCount180d: număr de luni în ultimele 6 în care soldul cumulat a intrat pe negativ
+        let overdraftUsedCount180d: Int = {
+            let history = computeMonthlyBalanceHistory(snapshot: snapshot, cashFlow: cashFlow)
+            var runningBalance = 0
+            var count = 0
+            for monthly in history.suffix(6) {
+                runningBalance += monthly.amount
+                if runningBalance < 0 { count += 1 }
+            }
+            return count
+        }()
+
         let spending = WowSpending(
             monthlyAvg: cashFlow.monthlySpendingAvg,
             incomeConsumptionRatio: cashFlow.incomeConsumptionRatio,
             monthlyBalanceTrend: cashFlow.monthlyBalanceTrend,
-            cardCreditUsed: false,
-            overdraftUsedCount180d: 0
+            cardCreditUsed: cardCreditUsed,
+            overdraftUsedCount180d: overdraftUsedCount180d
         )
 
         let obligationsTotal = snapshot.obligations.reduce(Money(0)) { $0 + $1.amount }
@@ -782,13 +850,71 @@ public final class MomentEngine {
             )
         }
 
+        // Outliers: top 3 cheltuieli mari unice (> medie lunară / 3) în ultimele 180 zile
+        let outliers: [OutlierItem] = {
+            let cal = Calendar.current
+            let cutoff = cal.date(byAdding: .day, value: -180, to: snapshot.referenceDate) ?? snapshot.referenceDate
+            let avgMonthly = cashFlow.monthlySpendingAvg.amount
+            let threshold = avgMonthly > 0 ? avgMonthly / 3 : 500
+            return snapshot.transactions
+                .filter { $0.isOutgoing && $0.date >= cutoff && $0.amount.amount >= threshold }
+                .sorted { $0.amount.amount > $1.amount.amount }
+                .prefix(3)
+                .enumerated()
+                .map { (idx, tx) in
+                    OutlierItem(
+                        rank: idx + 1,
+                        type: .singleLargePurchase,
+                        category: tx.category,
+                        merchant: tx.merchant,
+                        amount: tx.amount,
+                        date: tx.date,
+                        contextPhrase: "\(tx.merchant ?? tx.category.displayNameRO) — \(tx.amount.amount) RON",
+                        contextComparison: ""
+                    )
+                }
+        }()
+
+        // Patterns: convertim din PatternDetector report
+        let patternReport = patternDetector.detect(
+            transactions: snapshot.transactions,
+            referenceDate: snapshot.referenceDate
+        )
+        var wowPatterns: [PatternItem] = []
+        if patternReport.weekendSpike.isSignificant {
+            wowPatterns.append(PatternItem(
+                type: .weekendSpike,
+                description: "Cheltuielile din weekend sunt de \(String(format: "%.1f", patternReport.weekendSpike.ratio))x mai mari decât în zilele de lucru",
+                interpretation: "Posibil stil de viață weekend intensiv",
+                averageWeekendSpend: patternReport.weekendSpike.weekendAvgPerDay,
+                averageWeekdaySpend: patternReport.weekendSpike.weekdayAvgPerDay,
+                ratio: patternReport.weekendSpike.ratio
+            ))
+        }
+        for spike in patternReport.frequencySpikes.prefix(2) {
+            wowPatterns.append(PatternItem(
+                type: .frequencySpike,
+                category: spike.category,
+                description: spike.description,
+                interpretation: "Frecvență crescută față de media personală"
+            ))
+        }
+        if let cluster = patternReport.temporalClusters.first(where: { $0.isStrong }) {
+            wowPatterns.append(PatternItem(
+                type: .temporalClustering,
+                category: cluster.category,
+                description: cluster.description,
+                interpretation: "Pattern temporal repetat în ultimele 3 luni"
+            ))
+        }
+
         return WowMomentContext(
             user: buildMomentUser(snapshot: snapshot),
             analysisPeriodDays: cashFlow.windowDays,
             income: income,
             spending: spending,
-            outliers: [],
-            patterns: [],
+            outliers: Array(outliers),
+            patterns: wowPatterns,
             obligations: obligationsBlock,
             ghostSubscriptions: ghostsBlock,
             positives: positives,

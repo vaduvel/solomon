@@ -152,24 +152,29 @@ struct SettingsView: View {
     @ViewBuilder
     private var subscriptionSection: some View {
         Section {
-            HStack(spacing: SolSpacing.md) {
-                Image(systemName: "crown.fill")
-                    .font(.body)
-                    .foregroundStyle(Color.solPrimary)
-                    .symbolRenderingMode(.hierarchical)
-                    .frame(width: 28)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Solomon Plus")
+            Button {
+                Haptics.light()
+                openURL("https://apps.apple.com/account/subscriptions")
+            } label: {
+                HStack(spacing: SolSpacing.md) {
+                    Image(systemName: "crown.fill")
                         .font(.body)
-                        .foregroundStyle(Color.solForeground)
-                    Text("39 RON/lună · Reînnoire pe 15 mai")
+                        .foregroundStyle(Color.solPrimary)
+                        .symbolRenderingMode(.hierarchical)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(vm.userPlan)
+                            .font(.body)
+                            .foregroundStyle(Color.solForeground)
+                        Text(vm.subscriptionStatusLabel)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.footnote)
-                    .foregroundStyle(.tertiary)
             }
             .listRowBackground(Color.solCard)
         } header: {
@@ -183,9 +188,15 @@ struct SettingsView: View {
             navRow(icon: "cpu.fill", iconColor: .solCyan, label: "Modelul LLM") {
                 showModelDownload = true
             }
-            navRow(icon: "info.circle.fill", iconColor: .secondary, label: "Despre Solomon", value: "v1.0.0")
-            navRow(icon: "lock.shield.fill", iconColor: .secondary, label: "Confidențialitate")
-            navRow(icon: "doc.text.fill", iconColor: .secondary, label: "Termeni de utilizare")
+            navRow(icon: "info.circle.fill", iconColor: .secondary, label: "Despre Solomon", value: "v1.0.0") {
+                openURL("https://solomon.ro/despre")
+            }
+            navRow(icon: "lock.shield.fill", iconColor: .secondary, label: "Confidențialitate") {
+                openURL("https://solomon.ro/privacy")
+            }
+            navRow(icon: "doc.text.fill", iconColor: .secondary, label: "Termeni de utilizare") {
+                openURL("https://solomon.ro/terms")
+            }
             Toggle(isOn: $vm.trainingOptIn) {
                 Label("Contribuie la training", systemImage: "brain.head.profile")
                     .symbolRenderingMode(.hierarchical)
@@ -286,6 +297,11 @@ struct SettingsView: View {
         }
     }
 
+    private func openURL(_ urlString: String) {
+        guard let url = URL(string: urlString) else { return }
+        UIApplication.shared.open(url)
+    }
+
     private func runDemoGenerate() {
         let ctx = SolomonPersistenceController.shared.container.viewContext
         let txRepo = CoreDataTransactionRepository(context: ctx)
@@ -339,7 +355,6 @@ final class SettingsViewModel: ObservableObject {
     @Published var notificationsEnabled: Bool = false {
         didSet { persistConsent() }
     }
-    @Published var calendarEnabled: Bool = false
     @Published var trainingOptIn: Bool = false {
         didSet { persistConsent() }
     }
@@ -347,6 +362,26 @@ final class SettingsViewModel: ObservableObject {
 
     private var userProfileRepo: (any UserProfileRepository)?
     private var isLoading: Bool = false
+
+    /// Detalii abonament — la lansare afișăm prețul standard; când StoreKit e integrat
+    /// se va actualiza dinamic din Product.subscription.status.
+    var subscriptionStatusLabel: String {
+        let cal = Calendar.current
+        let now = Date()
+        // Găsim ziua de 15 a lunii viitoare (sau a celei curente dacă e după 15)
+        let day = cal.component(.day, from: now)
+        let renewMonth: Date
+        if day <= 15 {
+            renewMonth = cal.date(bySetting: .day, value: 15, of: now) ?? now
+        } else {
+            let nextMonth = cal.date(byAdding: .month, value: 1, to: now) ?? now
+            renewMonth = cal.date(bySetting: .day, value: 15, of: nextMonth) ?? nextMonth
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ro_RO")
+        formatter.dateFormat = "d MMMM"
+        return "39 RON/lună · Reînnoire pe \(formatter.string(from: renewMonth))"
+    }
 
     var connectedBanksLabel: String {
         if connectedBanks.isEmpty { return "Setup" }

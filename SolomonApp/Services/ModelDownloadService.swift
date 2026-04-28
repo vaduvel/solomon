@@ -34,6 +34,19 @@ public final class ModelDownloadService: ObservableObject {
         Task { await syncState() }
     }
 
+    /// Returnează un LLMProvider gata de inferență — MLX dacă e descărcat,
+    /// altfel TemplateLLMProvider ca fallback sigur. Apelat din TodayViewModel
+    /// și orice MomentEngine la construcție.
+    public func makeLLMProvider() -> any LLMProvider {
+        if let p = provider {
+            return SmartLLMProvider(primary: p, fallback: TemplateLLMProvider())
+        }
+        // Provider nu a fost creat încă (race la cold start) — creăm unul instant
+        let p = MLXLLMProvider(config: config)
+        self.provider = p
+        return SmartLLMProvider(primary: p, fallback: TemplateLLMProvider())
+    }
+
     public func setConfig(_ newConfig: MLXLLMProvider.Config) {
         self.config = newConfig
         Task {

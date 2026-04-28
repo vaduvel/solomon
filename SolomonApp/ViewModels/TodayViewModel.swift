@@ -1,10 +1,8 @@
 import SwiftUI
-import UserNotifications
 import SolomonCore
 import SolomonStorage
 import SolomonAnalytics
 import SolomonMoments
-import SolomonLLM
 
 // MARK: - TodayViewModel
 //
@@ -25,7 +23,6 @@ final class TodayViewModel: ObservableObject {
     @Published var greetingText: String = ""
     @Published var userName: String = ""
     @Published var hasUnreadAlert: Bool = false
-    @Published var showCanIAfford: Bool = false
 
     @Published var isBudgetTight: Bool = false
     @Published var isLoadingMoment: Bool = false
@@ -39,7 +36,12 @@ final class TodayViewModel: ObservableObject {
     private var userProfileRepo: (any UserProfileRepository)?
 
     private let safeToSpendCalc = SafeToSpendCalculator()
-    private let momentEngine = MomentEngine()    // foloseste TemplateLLMProvider default
+    private var momentEngine = MomentEngine()    // recreat cu provider real în configure()
+
+    // MARK: - Moment history (UserDefaults)
+
+    private static let recentMomentsKey = "ro.solomon.recentMoments.v1"
+    private static let maxRecentMoments = 5
 
     // MARK: - Configuration
 
@@ -50,6 +52,13 @@ final class TodayViewModel: ObservableObject {
         self.subscriptionRepo = CoreDataSubscriptionRepository(context: ctx)
         self.goalRepo         = CoreDataGoalRepository(context: ctx)
         self.userProfileRepo  = CoreDataUserProfileRepository(context: ctx)
+
+        // Injectăm provider-ul real (MLX dacă e descărcat, Template fallback)
+        let llm = ModelDownloadService.shared.makeLLMProvider()
+        momentEngine = MomentEngine(llm: llm)
+
+        // Restaurăm istoricul de momente din UserDefaults
+        loadRecentMomentsCache()
     }
 
     // MARK: - Load
@@ -148,11 +157,14 @@ final class TodayViewModel: ObservableObject {
 
         do {
             if let output = try await momentEngine.generateBestMoment(snapshot: snapshot) {
-                currentMoment = DisplayMoment.from(output)
+                let dm = DisplayMoment.from(output)
+                currentMoment = dm
                 // Push critic dacă app e în foreground și momentul e urgency-high
                 if let type = selectedType, isCriticalMomentType(type) {
                     await BackgroundTaskService.shared.sendPushNotification(for: type)
                 }
+                // Salvăm în history
+                appendToRecentMoments(dm)
             } else {
                 currentMoment = nil
             }
@@ -161,9 +173,6 @@ final class TodayViewModel: ObservableObject {
             currentMoment = nil
             print("⚠️ Moment generation failed: \(error.localizedDescription)")
         }
-
-        // Recent moments — momentan empty (vom adăuga history persistent în Faza 26+)
-        recentMoments = []
     }
 
     // MARK: - Helpers
@@ -207,5 +216,67 @@ final class TodayViewModel: ObservableObject {
         case .spiralAlert, .upcomingObligation: return true
         default: return false
         }
+    }
+
+    // MARK: - Moment history cache
+
+    /// Struct minimal Codable pentru persistare în UserDefaults.
+    /// (DisplayMoment conține Color care nu e Codable direct.)
+    private struct CachedMoment: Codable {
+        let id: UUID
+        let momentTypeRaw: String
+        let title: String
+        let subtitle: String
+        let llmResponse: String
+        let generatedAt: Date
+        let systemIconName: String
+        let badge: String?
+    }
+
+    private func appendToRecentMoments(_ moment: DisplayMoment) {
+        var history = recentMoments
+        // Evităm duplicate consecutive (același titlu + aceeași zi)
+        if let last = history.first, last.title == moment.title { return }
+        history.insert(moment, at: 0)
+        if history.count > Self.maxRecentMoments {
+            history = Array(history.prefix(Self.maxRecentMoments))
+        }
+        recentMoments = history
+        saveRecentMomentsCache(history)
+    }
+
+    private func loadRecentMomentsCache() {
+        guard let data = UserDefaults.standard.data(forKey: Self.recentMomentsKey),
+              let cached = try? JSONDecoder().decode([CachedMoment].self, from: data)
+        else { return }
+        recentMoments = cached.map { c in
+            DisplayMoment(
+                id: c.id,
+                momentTypeRaw: c.momentTypeRaw,
+                title: c.title,
+                subtitle: c.subtitle,
+                llmResponse: c.llmResponse,
+                generatedAt: c.generatedAt,
+                systemIconName: c.systemIconName,
+                badge: c.badge
+            )
+        }
+    }
+
+    private func saveRecentMomentsCache(_ moments: [DisplayMoment]) {
+        let cached = moments.map { m in
+            CachedMoment(
+                id: m.id,
+                momentTypeRaw: m.momentTypeRaw,
+                title: m.title,
+                subtitle: m.subtitle,
+                llmResponse: m.llmResponse,
+                generatedAt: m.generatedAt,
+                systemIconName: m.systemIconName,
+                badge: m.badge
+            )
+        }
+        guard let data = try? JSONEncoder().encode(cached) else { return }
+        UserDefaults.standard.set(data, forKey: Self.recentMomentsKey)
     }
 }
