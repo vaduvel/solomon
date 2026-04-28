@@ -1,9 +1,9 @@
 import SwiftUI
 
-// MARK: - SolomonToggle (DS v1.0)
+// MARK: - SolomonToggle (Apple HIG strict — Faza 28)
 //
-// Custom toggle/switch conform Penny DS — mint când ON.
-// Layout: titlu + subtitle stânga, switch dreapta.
+// Toggle nativ iOS cu styling Penny tint. Folosit în afara Form/List
+// (în Form folosim Toggle() direct).
 
 struct SolomonToggle: View {
     let title: String
@@ -11,29 +11,21 @@ struct SolomonToggle: View {
     @Binding var isOn: Bool
 
     var body: some View {
-        HStack(alignment: .center, spacing: SolSpacing.md) {
+        Toggle(isOn: $isOn) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.solBodyBold)
+                    .font(.body)
                     .foregroundStyle(Color.solForeground)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solMuted)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
-            Spacer()
-            Toggle("", isOn: $isOn)
-                .labelsHidden()
-                .tint(Color.solPrimary)
         }
+        .tint(Color.solPrimary)
         .padding(SolSpacing.base)
-        .background(Color.solCard)
-        .clipShape(RoundedRectangle(cornerRadius: SolRadius.xl, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: SolRadius.xl, style: .continuous)
-                .stroke(Color.solBorder, lineWidth: 1)
-        )
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: SolRadius.lg, style: .continuous))
     }
 }
 
@@ -44,12 +36,8 @@ struct SolomonToggle: View {
     ZStack {
         Color.solCanvas.ignoresSafeArea()
         VStack(spacing: SolSpacing.md) {
-            SolomonToggle(
-                title: "Auto-save enabled",
-                subtitle: "Automatically round up transactions",
-                isOn: $on
-            )
-            SolomonToggle(title: "Ai venituri extra?", isOn: $off)
+            SolomonToggle(title: "Auto-save", subtitle: "Round up transactions", isOn: $on)
+            SolomonToggle(title: "Venituri extra", isOn: $off)
         }
         .padding(SolSpacing.lg)
     }

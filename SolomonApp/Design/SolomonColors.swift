@@ -1,97 +1,105 @@
 import SwiftUI
 
-// MARK: - Solomon Design System v1.0 — Culori
+// MARK: - Solomon Design System v3.0 — Apple iOS 26 Native (Faza 28)
 //
-// Sursa adevărului: Penny DS v1.0 (mockup-urile + DS sheet trimise de Daniel).
-// Filozofie: AMOLED black-blue, neon green primary, glassmorphism cards, motion neon.
-// Toți tokens-ii din DS sheet sunt aici 1:1.
+// Refactor MAJOR: nu mai folosim culori hardcoded custom. Folosim SEMANTIC
+// COLORS Apple iOS 26 — acelasi tokens pe care le foloseste Apple Mail/
+// Wallet/Music/Settings. Solomon arata IDENTIC cu apps Apple built-in.
+//
+// Aliasurile vechi (.solCanvas, .solCard, .solForeground etc.) raman ca
+// alias-uri spre tokenii Apple pentru migrare graduala. Cod nou foloseste
+// DIRECT primitives Apple (.primary, .secondary, Color(.systemBackground)).
 
 public extension Color {
 
-    // MARK: - Background layers (DS v1.0)
+    // MARK: - Brand accent (singurul nostru token "custom" — e .mint Apple nativ)
 
-    /// Canvas principal — #0A0E1A (deepest background, blue-black)
-    static let solCanvas    = Color(hex: "#0A0E1A")
-    /// Card / elevated surface — #1C2230
-    static let solCard      = Color(hex: "#1C2230")
-    /// Secondary background (input fields, list items) — #151923
-    static let solSecondary = Color(hex: "#151923")
+    /// Brandul Solomon = .mint (Apple iOS 26 system color, ~#00C896)
+    /// Pentru tint() pe butoane, controls, segments. NU pentru bg/text.
+    static let solBrand = Color.mint
 
-    /// Aliasuri legacy (păstrate pentru compatibilitate cu cod Faza 10–12)
-    static let solSurface   = Color(hex: "#1C2230")
-    static let solElevated  = Color(hex: "#1C2230")
+    // MARK: - Background layers (Apple iOS 26 semantic)
 
-    // MARK: - Text
+    /// Background general — adaptează la light/dark automat (negru AMOLED în dark)
+    static let solCanvas = Color(.systemGroupedBackground)
+    /// Card/elevated surface — adaptează automat
+    static let solCard = Color(.secondarySystemGroupedBackground)
+    /// Tertiary surface (modal, hover)
+    static let solSecondary = Color(.tertiarySystemGroupedBackground)
+    /// Surface non-grouped
+    static let solSurface = Color(.secondarySystemBackground)
+    /// Elevated surface
+    static let solElevated = Color(.tertiarySystemBackground)
 
-    /// Foreground primary — #FFFFFF
-    static let solForeground   = Color(hex: "#FFFFFF")
-    /// Muted foreground — #8B92A8
-    static let solMuted        = Color(hex: "#8B92A8")
+    // MARK: - Text (Apple semantic)
 
+    /// Text primar — Color.primary (alb în dark, negru în light)
+    static let solForeground = Color.primary
+    /// Text secundar — Color.secondary (gri 60%)
+    static let solMuted = Color.secondary
     /// Aliasuri legacy
-    static let solTextPrimary   = Color(hex: "#FFFFFF")
-    static let solTextSecondary = Color(hex: "#8B92A8")
-    static let solTextMuted     = Color(hex: "#8B92A8")
-    static let solText          = Color(hex: "#FFFFFF")
-    static let solTextTertiary  = Color(hex: "#8B92A8")
+    static let solTextPrimary = Color.primary
+    static let solTextSecondary = Color.secondary
+    static let solTextMuted = Color.secondary
+    static let solText = Color.primary
+    static let solTextTertiary = Color.secondary
 
-    // MARK: - Primary (neon green) + Cyan accent
+    // MARK: - Brand semantic (mapat la Apple system colors iOS 26)
 
-    /// Primary — #00FF87 (CTA, success, key numbers, toggles ON)
-    static let solPrimary     = Color(hex: "#00FF87")
-    /// Cyan accent — #00D4FF (gradient pair, secondary highlights)
-    static let solCyan        = Color(hex: "#00D4FF")
-
+    /// Primary CTA / success — .mint (iOS 26 vibrant green)
+    static let solPrimary = Color.mint
+    /// Secondary accent — .cyan (iOS 26 cyan)
+    static let solCyan = Color.cyan
     /// Aliasuri legacy
-    static let solMint        = Color(hex: "#00FF87")
-    static let solMintHover   = Color(hex: "#5EEAA3")
-    static let solMintDim     = Color(hex: "#2BA771")
+    static let solMint = Color.mint
+    static let solMintHover = Color.mint
+    static let solMintDim = Color.mint.opacity(0.6)
 
-    // MARK: - Semantic
+    // MARK: - Semantic state (Apple system colors)
 
-    /// Warning amber — #FFB800
-    static let solWarning   = Color(hex: "#FFB800")
-    /// Destructive (danger, negative amounts, errors) — #FF3B6D
-    static let solDestructive = Color(hex: "#FF3B6D")
-    static let solDanger      = Color(hex: "#FF3B6D")
-    /// Info blue — #60A5FA
-    static let solInfo      = Color(hex: "#60A5FA")
+    /// Warning / amber — .orange Apple
+    static let solWarning = Color.orange
+    /// Destructive / error — .red Apple (= #FF3B30 iOS standard)
+    static let solDestructive = Color.red
+    static let solDanger = Color.red
+    /// Info — .blue Apple
+    static let solInfo = Color.blue
 
-    // MARK: - Border
+    // MARK: - Border (Apple semantic)
 
-    /// Border subtle — rgba(255,255,255,0.08)
-    static let solBorder    = Color.white.opacity(0.08)
-    /// Border accent (neon green subtle, AI insight cards) — rgba(0,255,135,0.12)
-    static let solBorderAccent = Color(hex: "#00FF87").opacity(0.12)
+    /// Bordură subtilă — .separator Apple (auto-adapt)
+    static let solBorder = Color(.separator)
+    /// Bordură accent (cards AI insight) — mint subtil
+    static let solBorderAccent = Color.mint.opacity(0.25)
 }
 
-// MARK: - Gradients (DS v1.0 signature)
+// MARK: - Gradients (Solomon brand signature — folosit DOAR pentru hero CTAs)
 
 public extension LinearGradient {
 
-    /// Primary CTA gradient — green→cyan 135°
+    /// Brand gradient mint→cyan — DOAR pentru hero CTAs (Welcome, CanIAfford)
     static let solPrimaryCTA = LinearGradient(
-        colors: [Color(hex: "#00FF87"), Color(hex: "#00D4FF")],
+        colors: [Color.mint, Color.cyan],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
-    /// Hero / Avatar gradient (same as CTA)
+    /// Hero / Avatar gradient (alias)
     static let solHero = LinearGradient(
-        colors: [Color(hex: "#00FF87"), Color(hex: "#00D4FF")],
+        colors: [Color.mint, Color.cyan],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
-    /// Warning gradient — amber→pink-red 135°
+    /// Warning gradient (rar folosit)
     static let solWarningGradient = LinearGradient(
-        colors: [Color(hex: "#FFB800"), Color(hex: "#FF3B6D")],
+        colors: [Color.orange, Color.red],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 }
 
-// MARK: - Hex init helper
+// MARK: - Hex init (păstrat pentru cazuri speciale, dar evităm folosirea)
 
 extension Color {
     init(hex: String) {

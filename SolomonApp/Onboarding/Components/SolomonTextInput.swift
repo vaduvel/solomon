@@ -1,12 +1,15 @@
 import SwiftUI
 
-// MARK: - SolomonTextInput (DS v1.0)
+// MARK: - SolomonTextInput (Apple HIG strict — Faza 28)
 //
-// Text input conform Penny DS v1.0:
-//   - bg: #1C2230 (solCard)
-//   - border: rgba(255,255,255,0.08)
-//   - focus border: rgba(0,255,135,0.4) — mint glow
-//   - h-14, rounded-2xl, text-15px
+// Wrapper minimal peste TextField/SecureField nativ:
+//   - Icon prefix (SF Symbol)
+//   - Background nativ thinMaterial
+//   - Focus state cu accent solPrimary
+//   - Standard 50pt height (≥ HIG tap target)
+//
+// În forma de Form/insetGrouped folosim TextField direct (NU acest wrapper).
+// Acest wrapper e pentru ecrane de onboarding care NU sunt în List.
 
 struct SolomonTextInput: View {
 
@@ -20,11 +23,12 @@ struct SolomonTextInput: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        HStack(spacing: SolSpacing.md) {
+        HStack(spacing: SolSpacing.sm) {
             if let icon {
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(Color.solMuted)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20)
             }
 
             Group {
@@ -34,8 +38,7 @@ struct SolomonTextInput: View {
                     TextField(placeholder, text: $text)
                 }
             }
-            .font(.solBody)
-            .foregroundStyle(Color.solForeground)
+            .font(.body)
             .keyboardType(keyboardType)
             .focused($isFocused)
             .submitLabel(.done)
@@ -44,39 +47,31 @@ struct SolomonTextInput: View {
             if let tb = trailingButton {
                 Button(action: tb.action) {
                     Image(systemName: tb.icon)
-                        .font(.system(size: 16))
-                        .foregroundStyle(Color.solMuted)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
         .padding(.horizontal, SolSpacing.base)
-        .frame(height: 56)
-        .background(Color.solCard)
-        .clipShape(RoundedRectangle(cornerRadius: SolRadius.xxl, style: .continuous))
+        .frame(height: 50)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: SolRadius.lg, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: SolRadius.xxl, style: .continuous)
-                .stroke(
-                    isFocused ? Color.solPrimary.opacity(0.4) : Color.solBorder,
-                    lineWidth: isFocused ? 1.5 : 1
-                )
+            RoundedRectangle(cornerRadius: SolRadius.lg, style: .continuous)
+                .stroke(isFocused ? Color.solPrimary : Color.clear, lineWidth: 1.5)
         )
-        .shadow(
-            color: isFocused ? Color.solPrimary.opacity(0.2) : Color.clear,
-            radius: 12, x: 0, y: 0
-        )
-        .animation(.easeOut(duration: 0.2), value: isFocused)
+        .animation(.smooth(duration: 0.2), value: isFocused)
     }
 }
 
 #Preview {
     @Previewable @State var name = ""
-    @Previewable @State var search = "Bolt"
+    @Previewable @State var search = ""
 
     ZStack {
         Color.solCanvas.ignoresSafeArea()
         VStack(spacing: SolSpacing.base) {
-            SolomonTextInput(placeholder: "Ex: Monthly income...", text: $name)
-            SolomonTextInput(placeholder: "Search transactions...", text: $search, icon: "magnifyingglass")
+            SolomonTextInput(placeholder: "ex: Andrei", text: $name, icon: "person.fill")
+            SolomonTextInput(placeholder: "Search...", text: $search, icon: "magnifyingglass")
         }
         .padding(SolSpacing.lg)
     }

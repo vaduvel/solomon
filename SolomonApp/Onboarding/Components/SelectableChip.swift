@@ -1,12 +1,10 @@
 import SwiftUI
 
-// MARK: - SelectableChip & MultiSelectChip (DS v1.0)
+// MARK: - Chip components (Apple HIG strict — Faza 28)
 //
-// Chip-uri pill cu single/multi-select.
-// Selected: bg solPrimary opacity 0.15 + border solPrimary + text solPrimary
-// Unselected: bg transparent + border solBorder + text solMuted
+// Folosesc native Button cu `.borderedProminent` / `.bordered` styles + `.tint(.mint)`.
 
-// MARK: - Single-select chip
+// MARK: - SelectableChip (single-select)
 
 struct SelectableChip: View {
     let title: String
@@ -15,36 +13,35 @@ struct SelectableChip: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: SolSpacing.xs) {
-                if let icon {
-                    Image(systemName: icon)
-                        .font(.system(size: 13, weight: .medium))
-                }
-                Text(title)
-                    .font(.solBody)
-            }
-            .foregroundStyle(isSelected ? Color.solPrimary : Color.solForeground)
-            .padding(.horizontal, SolSpacing.base)
-            .padding(.vertical, 10)
-            .background(
-                Capsule()
-                    .fill(isSelected ? Color.solPrimary.opacity(0.12) : Color.clear)
-            )
-            .overlay(
-                Capsule()
-                    .stroke(
-                        isSelected ? Color.solPrimary : Color.white.opacity(0.15),
-                        lineWidth: isSelected ? 1.5 : 1
-                    )
-            )
+        if isSelected {
+            Button(action: action) { label }
+                .buttonStyle(.borderedProminent)
+                .tint(.mint)
+                .controlSize(.regular)
+                .sensoryFeedback(.selection, trigger: isSelected)
+        } else {
+            Button(action: action) { label }
+                .buttonStyle(.bordered)
+                .tint(.mint)
+                .controlSize(.regular)
+                .sensoryFeedback(.selection, trigger: isSelected)
         }
-        .buttonStyle(.plain)
-        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: isSelected)
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        HStack(spacing: SolSpacing.xs) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.footnote.weight(.medium))
+            }
+            Text(title)
+                .font(.subheadline)
+        }
     }
 }
 
-// MARK: - Multi-select chip (with checkmark)
+// MARK: - MultiSelectChip
 
 struct MultiSelectChip: View {
     let title: String
@@ -52,81 +49,64 @@ struct MultiSelectChip: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: SolSpacing.xs) {
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color.solPrimary)
-                }
-                Text(title)
-                    .font(.solBody)
-                    .foregroundStyle(isSelected ? Color.solPrimary : Color.solForeground)
-            }
-            .padding(.horizontal, SolSpacing.base)
-            .padding(.vertical, 10)
-            .background(
-                Capsule()
-                    .fill(isSelected ? Color.solPrimary.opacity(0.12) : Color.clear)
-            )
-            .overlay(
-                Capsule()
-                    .stroke(
-                        isSelected ? Color.solPrimary : Color.white.opacity(0.15),
-                        lineWidth: isSelected ? 1.5 : 1
-                    )
-            )
+        if isSelected {
+            Button(action: action) { label }
+                .buttonStyle(.borderedProminent)
+                .tint(.mint)
+                .controlSize(.regular)
+        } else {
+            Button(action: action) { label }
+                .buttonStyle(.bordered)
+                .tint(.mint)
+                .controlSize(.regular)
         }
-        .buttonStyle(.plain)
-        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: isSelected)
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        HStack(spacing: SolSpacing.xs) {
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.footnote.weight(.bold))
+            }
+            Text(title)
+                .font(.subheadline)
+        }
     }
 }
 
-// MARK: - Feature chip (with leading checkmark — used in welcome screen 1)
+// MARK: - FeatureChip (display-only — Welcome)
 
 struct FeatureChip: View {
     let title: String
-    var icon: String = "checkmark.circle.fill"
+    var icon: String = "checkmark"
 
     var body: some View {
-        HStack(spacing: SolSpacing.sm) {
-            Image(systemName: icon)
-                .font(.system(size: 14))
-                .foregroundStyle(Color.solPrimary)
-            Text(title)
-                .font(.solBody)
-                .foregroundStyle(Color.solForeground)
-            Spacer()
-        }
-        .padding(.horizontal, SolSpacing.base)
-        .padding(.vertical, SolSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.solCard)
-        .clipShape(Capsule())
-        .overlay(
-            Capsule().stroke(Color.solBorder, lineWidth: 1)
-        )
+        Label(title, systemImage: icon)
+            .font(.subheadline)
+            .foregroundStyle(.primary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, SolSpacing.base)
+            .padding(.vertical, SolSpacing.md)
+            .background(.regularMaterial, in: Capsule())
     }
 }
 
 #Preview {
     ZStack {
-        Color.solCanvas.ignoresSafeArea()
+        Color(.systemGroupedBackground).ignoresSafeArea()
         VStack(spacing: SolSpacing.base) {
             HStack {
                 SelectableChip(title: "<3.000", isSelected: false) {}
                 SelectableChip(title: "3-5.000", isSelected: true) {}
-                SelectableChip(title: "5-8.000", isSelected: false) {}
             }
             HStack {
                 MultiSelectChip(title: "Vacanță", isSelected: true) {}
                 MultiSelectChip(title: "Datorii", isSelected: false) {}
             }
-            FeatureChip(title: "Învăț din comportamentul tău")
-            FeatureChip(title: "Îți arăt ce să faci")
-            FeatureChip(title: "Fără judecăți")
+            FeatureChip(title: "Învăț din comportament", icon: "brain.head.profile")
         }
-        .padding(SolSpacing.lg)
+        .padding()
     }
     .preferredColorScheme(.dark)
 }

@@ -1,28 +1,24 @@
 import SwiftUI
 
-// MARK: - SolomonButton (DS v2.0 — Apple HIG aligned)
+// MARK: - SolomonButton (Apple HIG strict — Faza 28)
 //
-// Refactor Faza 27: aliniat la Apple Human Interface Guidelines.
-// Folosim sub-the-hood `Button` cu modifiers HIG pentru:
-//   - Tap target garantat ≥ 44pt
-//   - Haptic feedback automat
-//   - Stiluri standardizate (filled prominent / bordered / plain / danger)
-//   - Disabled state cu opacity HIG-recomandată
-//
-// Păstrăm gradient mint→cyan ca brand signature pe primary, dar cu corner
-// radius mai sobru (12pt în loc de 28pt) pentru aspect nativ.
+// Refactor: folosim DIRECT iOS native button styles via `.buttonStyle()`,
+// fără custom views. Brandul Solomon vine prin `.tint(.solPrimary)` și
+// gradient e folosit DOAR ca opțiune explicită pentru hero CTAs.
 
 public struct SolomonButton: View {
 
     public enum Style {
-        /// Primary CTA — gradient mint→cyan + neon glow (signature Solomon)
+        /// Native `.borderedProminent` cu solPrimary tint — DEFAULT pentru CTA
         case primary
-        /// Secondary — bordură primary + transparent bg
+        /// Native `.bordered` cu solPrimary tint
         case secondary
-        /// Destructive — solid red
+        /// Native `.borderedProminent` cu .red tint — destructive actions
         case danger
-        /// Plain — text only, no bg
+        /// Native `.plain` (text only)
         case ghost
+        /// Hero gradient mint→cyan — DOAR pentru CTA-uri hero (Welcome, CanIAfford big card)
+        case heroGradient
     }
 
     public let title: String
@@ -52,91 +48,81 @@ public struct SolomonButton: View {
             triggerHaptic += 1
             action()
         } label: {
-            HStack(spacing: SolSpacing.sm) {
-                if isLoading {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .scaleEffect(0.85)
-                        .tint(foregroundColor)
-                }
-                if let icon, !isLoading {
-                    Image(systemName: icon)
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(foregroundColor)
-                }
-                Text(title)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(foregroundColor)
-            }
-            .frame(maxWidth: .infinity, minHeight: 50)  // ≥ HIG tap target 44pt + breath
-            .padding(.horizontal, SolSpacing.base)
-            .background(backgroundView)
-            .clipShape(RoundedRectangle(cornerRadius: SolRadius.lg, style: .continuous))  // 12pt — HIG button
-            .overlay(borderOverlay)
-            .modifier(GlowModifier(style: style, isEnabled: !isLoading))
+            label
         }
+        .modifier(StyleModifier(style: style))
+        .controlSize(.large)
         .disabled(isLoading)
-        .buttonStyle(ScaleOnPressButtonStyle())
         .sensoryFeedback(.impact(weight: .medium), trigger: triggerHaptic)
     }
 
-    // MARK: - Styling
-
-    private var foregroundColor: Color {
-        switch style {
-        case .primary:   return Color.solCanvas        // text dark on bright gradient
-        case .secondary: return Color.solPrimary
-        case .danger:    return Color.white
-        case .ghost:     return Color.solPrimary
-        }
-    }
-
     @ViewBuilder
-    private var backgroundView: some View {
-        switch style {
-        case .primary:
-            LinearGradient.solPrimaryCTA
-        case .secondary:
-            Color.clear
-        case .danger:
-            Color.solDestructive
-        case .ghost:
-            Color.clear
+    private var label: some View {
+        HStack(spacing: SolSpacing.sm) {
+            if isLoading {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .controlSize(.small)
+            }
+            if let icon, !isLoading {
+                Image(systemName: icon)
+                    .font(.body.weight(.semibold))
+            }
+            Text(title)
+                .font(.body.weight(.semibold))
         }
-    }
-
-    @ViewBuilder
-    private var borderOverlay: some View {
-        if style == .secondary {
-            RoundedRectangle(cornerRadius: SolRadius.lg, style: .continuous)
-                .stroke(Color.solPrimary, lineWidth: 1.5)
-        }
+        .frame(maxWidth: .infinity)
     }
 }
 
-// MARK: - GlowModifier
+// MARK: - Style modifier
 
-private struct GlowModifier: ViewModifier {
+private struct StyleModifier: ViewModifier {
     let style: SolomonButton.Style
-    let isEnabled: Bool
 
     func body(content: Content) -> some View {
         switch style {
-        case .primary where isEnabled:
-            content.shadow(color: Color.solPrimary.opacity(0.30), radius: 14, x: 0, y: 4)
-        case .danger where isEnabled:
-            content.shadow(color: Color.solDestructive.opacity(0.25), radius: 12, x: 0, y: 4)
-        default:
+        case .primary:
             content
+                .buttonStyle(.borderedProminent)
+                .tint(Color.solPrimary)
+                .foregroundStyle(Color.solCanvas)
+
+        case .secondary:
+            content
+                .buttonStyle(.bordered)
+                .tint(Color.solPrimary)
+
+        case .danger:
+            content
+                .buttonStyle(.borderedProminent)
+                .tint(Color.solDestructive)
+                .foregroundStyle(.white)
+
+        case .ghost:
+            content
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.solPrimary)
+
+        case .heroGradient:
+            content
+                .buttonStyle(HeroGradientButtonStyle())
         }
     }
 }
 
-// MARK: - Press scale (subtle, HIG)
+// MARK: - Hero gradient style (DOAR pentru hero CTAs)
 
-private struct ScaleOnPressButtonStyle: ButtonStyle {
+private struct HeroGradientButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .padding(.horizontal, SolSpacing.lg)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .foregroundStyle(Color.solCanvas)
+            .background(LinearGradient.solPrimaryCTA)
+            .clipShape(RoundedRectangle(cornerRadius: SolRadius.lg, style: .continuous))
+            .shadow(color: Color.solPrimary.opacity(configuration.isPressed ? 0.20 : 0.30),
+                    radius: 12, x: 0, y: 4)
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
             .animation(.snappy(duration: 0.15), value: configuration.isPressed)
     }
@@ -153,6 +139,7 @@ private struct ScaleOnPressButtonStyle: ButtonStyle {
             SolomonButton("Loading...", isLoading: true) {}
             SolomonButton("Șterge", style: .danger, icon: "trash") {}
             SolomonButton("Mai târziu", style: .ghost) {}
+            SolomonButton("Hero CTA", style: .heroGradient, icon: "sparkles") {}
         }
         .padding(SolSpacing.base)
     }
