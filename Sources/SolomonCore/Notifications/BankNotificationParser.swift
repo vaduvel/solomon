@@ -229,29 +229,27 @@ public enum BankNotificationParser {
             // "250" — fără separator
             normalized = cleaned
 
-        case (let c?, nil):
+        case (_?, nil):
             // "65,00" sau "1.234" cu virgulă la final
             // Singura virgulă → separator zecimal
             normalized = cleaned.replacingOccurrences(of: ",", with: ".")
 
-        case (nil, let d?):
+        case (nil, _?):
             // "65.00" — deja în format standard
             // Dar "1,234" (fără punct) nu ajunge aici
-            _ = d
             normalized = cleaned
 
-        case (let c?, let d?):
-            if c > d {
-                // Ultima e virgulă → European: "1.234,56"
-                // Scoatem punctele (mii), înlocuim virgula cu punct
-                normalized = cleaned
-                    .replacingOccurrences(of: ".", with: "")
-                    .replacingOccurrences(of: ",", with: ".")
-            } else {
-                // Ultimul e punct → American: "1,234.56"
-                // Scoatem virgulele (mii)
-                normalized = cleaned.replacingOccurrences(of: ",", with: "")
-            }
+        case (let c?, let d?) where c > d:
+            // Ultima e virgulă → European: "1.234,56"
+            // Scoatem punctele (mii), înlocuim virgula cu punct
+            normalized = cleaned
+                .replacingOccurrences(of: ".", with: "")
+                .replacingOccurrences(of: ",", with: ".")
+
+        case (_?, _?):
+            // Ultimul e punct → American: "1,234.56"
+            // Scoatem virgulele (mii)
+            normalized = cleaned.replacingOccurrences(of: ",", with: "")
         }
 
         return Decimal(string: normalized)
