@@ -1,58 +1,63 @@
 import SwiftUI
 
-// MARK: - Solomon Design System v1.0 — Spacing & Radius
+// MARK: - Solomon Design System v2.0 — Spacing & Radius (Apple HIG aligned)
 //
-// Sursa adevărului: Penny DS v1.0 — bază 4.
+// 8pt grid strict. Radius HIG-native (8/12/16/28).
 
 public enum SolSpacing {
-    // Bază 4
-    public static let xs:   CGFloat = 4    // p-1
-    public static let sm:   CGFloat = 8    // p-2 / gap-2
-    public static let md:   CGFloat = 12   // p-3 / gap-3
-    public static let base: CGFloat = 16   // p-4 / gap-4
-    public static let lg:   CGFloat = 20   // px-5 (page padding)
-    public static let xl:   CGFloat = 24   // p-6
-    public static let xxl:  CGFloat = 32
+    // 8pt grid baseline
+    public static let xs:   CGFloat = 4
+    public static let sm:   CGFloat = 8     // gap-1 / row spacing
+    public static let md:   CGFloat = 12    // sub-section
+    public static let base: CGFloat = 16    // standard margins
+    public static let lg:   CGFloat = 20    // page padding (large screens)
+    public static let xl:   CGFloat = 24    // section gap small
+    public static let xxl:  CGFloat = 32    // section gap large
     public static let xxxl: CGFloat = 40
     public static let h:    CGFloat = 48
     public static let hh:   CGFloat = 64
 
-    // MARK: - Screen insets
+    // MARK: - HIG layout standards
 
-    /// Page padding — 20px (px-5 din DS)
-    public static let screenHorizontal: CGFloat = 20
+    /// Standard horizontal margin (16pt) — default pentru content
+    public static let screenHorizontal: CGFloat = 16
 
-    /// Section gap — 12px (space-y-3 din DS)
-    public static let sectionGap: CGFloat = 12
+    /// Wider page padding (20pt) — for hero / spacious screens
+    public static let screenHorizontalWide: CGFloat = 20
 
-    /// Card padding hero — 24px (p-6)
+    /// Section gap (24pt) — între grupuri logice de conținut
+    public static let sectionGap: CGFloat = 24
+
+    /// Section gap mare (32pt) — pentru breathing room
+    public static let sectionGapLarge: CGFloat = 32
+
+    /// Card padding standard (16pt)
+    public static let cardSmall: CGFloat = 16
+    public static let cardStandard: CGFloat = 20
     public static let cardHero: CGFloat = 24
 
-    /// Card padding standard — 20px (p-5)
-    public static let cardStandard: CGFloat = 20
+    /// Tap target minimum HIG (44×44pt)
+    public static let tapTargetMin: CGFloat = 44
 
-    /// Card padding small — 16px (p-4)
-    public static let cardSmall: CGFloat = 16
+    /// Bottom nav height
+    public static let bottomNavHeight: CGFloat = 50  // tab bar standard
 
-    /// Bottom nav height — 72px
-    public static let bottomNavHeight: CGFloat = 72
-
-    /// List row height — 72px
-    public static let listRowHeight: CGFloat = 72
+    /// List row standard height
+    public static let listRowHeight: CGFloat = 44
 }
 
 public enum SolRadius {
-    /// --radius-sm: 8px (chips, badges)
+    /// Mic — chips, badges (8pt)
     public static let sm:   CGFloat = 8
-    /// --radius-md: 10px
+    /// Medium — buttons standard (12pt)
     public static let md:   CGFloat = 10
-    /// --radius-lg: 12px
+    /// Standard buttons & cards small (12pt)
     public static let lg:   CGFloat = 12
-    /// --radius-xl: 16px (standard cards)
+    /// Cards standard (16pt)
     public static let xl:   CGFloat = 16
-    /// custom-2xl: 24px (hero cards, sheets, CTA buttons)
-    public static let xxl:  CGFloat = 24
-    /// custom-full: 9999px (pill chips, avatars)
+    /// Hero cards / sheets / large CTAs (28pt — HIG sheet-like)
+    public static let xxl:  CGFloat = 28
+    /// Pill (capsule) — circular elements
     public static let pill: CGFloat = 9999
 }
 
@@ -60,12 +65,12 @@ public enum SolRadius {
 
 public extension View {
 
-    /// Padding standard pentru conținut de ecran (orizontal)
+    /// Padding orizontal standard (16pt)
     func solScreenPadding() -> some View {
         self.padding(.horizontal, SolSpacing.screenHorizontal)
     }
 
-    /// Standard card: bg #1C2230 + radius xl + border subtle
+    /// Standard card: bg solCard + radius xl + border
     func solCard() -> some View {
         self
             .background(Color.solCard)
@@ -76,8 +81,7 @@ public extension View {
             )
     }
 
-    /// Glassmorphism hero card — rgba(28,34,48,0.5) + blur(40px) + border
-    /// Folosit pentru numerele eroice (Safe to Spend, Payday)
+    /// Glassmorphism card (hero numbers — Safe-to-Spend, Payday)
     func solGlassCard() -> some View {
         self
             .background(.ultraThinMaterial)
@@ -89,7 +93,7 @@ public extension View {
             )
     }
 
-    /// AI insight card — bg solCard + border accent neon green subtle
+    /// AI insight card — neon green border subtil
     func solAIInsightCard() -> some View {
         self
             .background(Color.solCard)
@@ -100,7 +104,7 @@ public extension View {
             )
     }
 
-    /// Elevated card — alias pentru solCard în context modal/popover
+    /// Elevated card (modal, popover, sheet content)
     func solElevatedCard() -> some View {
         self
             .background(Color.solCard)
@@ -111,8 +115,13 @@ public extension View {
             )
     }
 
-    /// Neon glow shadow primary (CTA buttons, active states)
+    /// Neon glow shadow (CTA prominent, focus state)
     func solNeonGlow(color: Color = .solPrimary, radius: CGFloat = 20, opacity: Double = 0.35) -> some View {
         self.shadow(color: color.opacity(opacity), radius: radius, x: 0, y: 4)
+    }
+
+    /// Asigură tap target ≥ 44pt
+    func solTapTarget() -> some View {
+        self.frame(minWidth: SolSpacing.tapTargetMin, minHeight: SolSpacing.tapTargetMin)
     }
 }
