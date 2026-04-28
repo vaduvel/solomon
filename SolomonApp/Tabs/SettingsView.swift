@@ -2,10 +2,10 @@ import SwiftUI
 import SolomonCore
 import SolomonStorage
 
-// MARK: - SettingsView (Tab 4 — Setări)
+// MARK: - SettingsView (HIG aligned — insetGrouped Form)
 //
-// Profil user, permisiuni, abonament, about.
-// Faza 10: layout complet cu date mock.
+// Refactor Faza 27: convert la nativ Form/.insetGrouped pattern Apple
+// (ce vezi în Settings.app iOS).
 
 struct SettingsView: View {
 
@@ -19,11 +19,8 @@ struct SettingsView: View {
     @State private var showDebugAlert: DebugAlertKind?
 
     enum DebugAlertKind: Identifiable {
-        case demoGenerated
-        case dataCleared
-        case onboardingReset
+        case demoGenerated, dataCleared, onboardingReset
         case error(String)
-
         var id: String {
             switch self {
             case .demoGenerated: return "demo"
@@ -36,89 +33,256 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.solCanvas.ignoresSafeArea()
-
-                List {
-                    // Profil
-                    profileSection
-
-                    // Conectări
-                    connectionsSection
-
-                    // Notificări
-                    notificationsSection
-
-                    // Abonament
-                    subscriptionSection
-
-                    // About
-                    aboutSection
-
-                    // Debug (doar build Debug)
-                    #if DEBUG
-                    debugSection
-                    #endif
-                }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
+            Form {
+                profileSection
+                connectionsSection
+                notificationsSection
+                subscriptionSection
+                aboutSection
+                #if DEBUG
+                debugSection
+                #endif
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.solCanvas)
             .navigationTitle("Setări")
             .navigationBarTitleDisplayMode(.large)
-            .sheet(isPresented: $showShortcutSetup) {
-                ShortcutSetupView()
-            }
-            .sheet(isPresented: $showProfileEdit) {
-                ProfileEditView()
-            }
-            .sheet(isPresented: $showGoalsList) {
-                GoalsListView()
-            }
-            .sheet(isPresented: $showSpiralAlert) {
-                SpiralAlertView()
-            }
-            .sheet(isPresented: $showEmailParser) {
-                EmailParserSheet()
-            }
-            .sheet(isPresented: $showModelDownload) {
-                ModelDownloadView()
-            }
+            .sheet(isPresented: $showShortcutSetup) { ShortcutSetupView() }
+            .sheet(isPresented: $showProfileEdit) { ProfileEditView() }
+            .sheet(isPresented: $showGoalsList) { GoalsListView() }
+            .sheet(isPresented: $showSpiralAlert) { SpiralAlertView() }
+            .sheet(isPresented: $showEmailParser) { EmailParserSheet() }
+            .sheet(isPresented: $showModelDownload) { ModelDownloadView() }
             .onAppear {
                 vm.configure(persistence: SolomonPersistenceController.shared)
             }
             .alert(item: $showDebugAlert) { kind in
                 switch kind {
                 case .demoGenerated:
-                    return Alert(title: Text("✅ Demo data"),
-                                 message: Text("Am generat 6 luni de tranzacții, obligații și abonamente."))
+                    return Alert(title: Text("Demo data generat"),
+                                 message: Text("6 luni de tranzacții, obligații și abonamente."))
                 case .dataCleared:
-                    return Alert(title: Text("🗑 Date șterse"),
-                                 message: Text("Toate tranzacțiile, obligațiile și abonamentele au fost șterse."))
+                    return Alert(title: Text("Date șterse"),
+                                 message: Text("Toate datele financiare au fost șterse."))
                 case .onboardingReset:
-                    return Alert(title: Text("♻️ Onboarding resetat"),
+                    return Alert(title: Text("Onboarding resetat"),
                                  message: Text("Repornește app-ul ca să intri în onboarding."))
                 case .error(let msg):
-                    return Alert(title: Text("⚠️ Eroare"), message: Text(msg))
+                    return Alert(title: Text("Eroare"), message: Text(msg))
                 }
             }
+        }
+    }
+
+    // MARK: - Sections (Apple Form pattern)
+
+    @ViewBuilder
+    private var profileSection: some View {
+        Section {
+            // Avatar + Name + Plan
+            HStack(spacing: SolSpacing.md) {
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient.solHero)
+                        .frame(width: 52, height: 52)
+                    Text(String(vm.userName.prefix(1)).uppercased())
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(Color.solCanvas)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(vm.userName)
+                        .font(.headline)
+                        .foregroundStyle(Color.solForeground)
+                    Text(vm.userPlan)
+                        .font(.footnote)
+                        .foregroundStyle(Color.solPrimary)
+                }
+                Spacer()
+            }
+            .padding(.vertical, SolSpacing.xs)
+            .listRowBackground(Color.solCard)
+
+            navRow(icon: "person.fill", iconColor: .solCyan, label: "Profil financiar") {
+                showProfileEdit = true
+            }
+
+            navRow(icon: "target", iconColor: .solPrimary, label: "Obiective") {
+                showGoalsList = true
+            }
+        } header: {
+            Text("Profil")
+        }
+    }
+
+    @ViewBuilder
+    private var connectionsSection: some View {
+        Section {
+            navRow(icon: "app.badge", iconColor: .solPrimary, label: "Conectează banca", value: vm.connectedBanksLabel) {
+                showShortcutSetup = true
+            }
+            navRow(icon: "tray.and.arrow.down.fill", iconColor: .solCyan, label: "Importă din email") {
+                showEmailParser = true
+            }
+            Toggle(isOn: $vm.notificationsEnabled) {
+                Label("Notificări push", systemImage: "bell.fill")
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .tint(Color.solPrimary)
+            .listRowBackground(Color.solCard)
+        } header: {
+            Text("Conectări")
+        } footer: {
+            Text("Datele tale rămân pe telefon. Solomon e privat.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var notificationsSection: some View {
+        Section {
+            navRow(icon: "shield.lefthalf.filled", iconColor: .solWarning, label: "Verificare spirală") {
+                showSpiralAlert = true
+            }
+        } header: {
+            Text("Sănătate financiară")
+        }
+    }
+
+    @ViewBuilder
+    private var subscriptionSection: some View {
+        Section {
+            HStack(spacing: SolSpacing.md) {
+                Image(systemName: "crown.fill")
+                    .font(.body)
+                    .foregroundStyle(Color.solPrimary)
+                    .symbolRenderingMode(.hierarchical)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Solomon Plus")
+                        .font(.body)
+                        .foregroundStyle(Color.solForeground)
+                    Text("39 RON/lună · Reînnoire pe 15 mai")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.footnote)
+                    .foregroundStyle(.tertiary)
+            }
+            .listRowBackground(Color.solCard)
+        } header: {
+            Text("Abonament")
+        }
+    }
+
+    @ViewBuilder
+    private var aboutSection: some View {
+        Section {
+            navRow(icon: "cpu.fill", iconColor: .solCyan, label: "Modelul LLM") {
+                showModelDownload = true
+            }
+            navRow(icon: "info.circle.fill", iconColor: .secondary, label: "Despre Solomon", value: "v1.0.0")
+            navRow(icon: "lock.shield.fill", iconColor: .secondary, label: "Confidențialitate")
+            navRow(icon: "doc.text.fill", iconColor: .secondary, label: "Termeni de utilizare")
+            Toggle(isOn: $vm.trainingOptIn) {
+                Label("Contribuie la training", systemImage: "brain.head.profile")
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .tint(Color.solPrimary)
+            .listRowBackground(Color.solCard)
+        } header: {
+            Text("Despre")
         }
     }
 
     @ViewBuilder
     private var debugSection: some View {
         Section {
-            settingsRow(icon: "wand.and.stars", label: "Generează demo data", value: "6 luni") {
+            Button {
+                Haptics.light()
                 runDemoGenerate()
+            } label: {
+                Label("Generează demo data", systemImage: "wand.and.stars")
             }
-            settingsRow(icon: "trash", label: "Șterge toate datele", value: nil) {
+            .listRowBackground(Color.solCard)
+
+            Button(role: .destructive) {
+                Haptics.warning()
                 runClearData()
+            } label: {
+                Label("Șterge toate datele", systemImage: "trash")
             }
-            settingsRow(icon: "arrow.counterclockwise", label: "Reset onboarding", value: nil) {
+            .listRowBackground(Color.solCard)
+
+            Button {
+                Haptics.warning()
                 OnboardingState.resetForDebug()
                 showDebugAlert = .onboardingReset
+            } label: {
+                Label("Reset onboarding", systemImage: "arrow.counterclockwise")
             }
+            .listRowBackground(Color.solCard)
         } header: {
-            sectionHeader("DEBUG (DEV BUILD)")
+            Text("Debug")
+        }
+    }
+
+    // MARK: - Helpers
+
+    @ViewBuilder
+    private func navRow(
+        icon: String,
+        iconColor: Color,
+        label: String,
+        value: String? = nil,
+        action: (() -> Void)? = nil
+    ) -> some View {
+        if let action {
+            Button {
+                Haptics.light()
+                action()
+            } label: {
+                HStack(spacing: SolSpacing.md) {
+                    Image(systemName: icon)
+                        .font(.body)
+                        .foregroundStyle(iconColor)
+                        .symbolRenderingMode(.hierarchical)
+                        .frame(width: 28)
+                    Text(label)
+                        .font(.body)
+                        .foregroundStyle(Color.solForeground)
+                    Spacer()
+                    if let value {
+                        Text(value)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .listRowBackground(Color.solCard)
+        } else {
+            HStack(spacing: SolSpacing.md) {
+                Image(systemName: icon)
+                    .font(.body)
+                    .foregroundStyle(iconColor)
+                    .symbolRenderingMode(.hierarchical)
+                    .frame(width: 28)
+                Text(label)
+                    .font(.body)
+                    .foregroundStyle(Color.solForeground)
+                Spacer()
+                if let value {
+                    Text(value)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .listRowBackground(Color.solCard)
         }
     }
 
@@ -136,8 +300,10 @@ struct SettingsView: View {
                 userProfileRepo: userRepo
             )
             showDebugAlert = .demoGenerated
+            Haptics.success()
         } catch {
             showDebugAlert = .error(error.localizedDescription)
+            Haptics.error()
         }
     }
 
@@ -153,231 +319,11 @@ struct SettingsView: View {
                 subscriptionRepo: subRepo
             )
             showDebugAlert = .dataCleared
+            Haptics.success()
         } catch {
             showDebugAlert = .error(error.localizedDescription)
+            Haptics.error()
         }
-    }
-
-    // MARK: - Sections
-
-    @ViewBuilder
-    private var profileSection: some View {
-        Section {
-            HStack(spacing: SolSpacing.md) {
-                ZStack {
-                    Circle()
-                        .fill(Color.solMint.opacity(0.15))
-                        .frame(width: 52, height: 52)
-                    Text("A")
-                        .font(.solHeadingXL)
-                        .foregroundStyle(Color.solMint)
-                }
-
-                VStack(alignment: .leading, spacing: SolSpacing.xs) {
-                    Text(vm.userName)
-                        .font(.solHeadingSM)
-                        .foregroundStyle(Color.solTextPrimary)
-                    Text(vm.userPlan)
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solMint)
-                }
-            }
-            .listRowBackground(Color.solSurface)
-            .listRowSeparatorTint(Color.solBorder)
-
-            settingsRow(icon: "person.fill", label: "Profil financiar", value: nil) {
-                showProfileEdit = true
-            }
-
-            settingsRow(icon: "target", label: "Obiective", value: nil) {
-                showGoalsList = true
-            }
-        } header: {
-            sectionHeader("PROFIL")
-        }
-    }
-
-    @ViewBuilder
-    private var connectionsSection: some View {
-        Section {
-            // Hero row — conectează banca via Shortcuts
-            Button(action: { showShortcutSetup = true }) {
-                HStack(spacing: SolSpacing.md) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: SolRadius.sm, style: .continuous)
-                            .fill(Color.solMint.opacity(0.15))
-                            .frame(width: 32, height: 32)
-                        Image(systemName: "app.badge")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(Color.solMint)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Conectează banca")
-                            .font(.solBodyMD)
-                            .foregroundStyle(Color.solTextPrimary)
-                        Text(vm.connectedBanksLabel)
-                            .font(.solCaption)
-                            .foregroundStyle(Color.solMint)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.solTextMuted)
-                }
-            }
-            .listRowBackground(Color.solSurface)
-            .listRowSeparatorTint(Color.solBorder)
-
-            settingsRow(icon: "tray.and.arrow.down.fill", label: "Importă din email manual", value: nil) {
-                showEmailParser = true
-            }
-
-            settingsToggleRow(
-                icon: "envelope.fill",
-                iconColor: .solInfo,
-                label: "Gmail conectat",
-                isOn: $vm.isGmailConnected
-            )
-
-            settingsToggleRow(
-                icon: "bell.fill",
-                iconColor: .solMint,
-                label: "Notificări push",
-                isOn: $vm.notificationsEnabled
-            )
-
-            settingsToggleRow(
-                icon: "calendar",
-                iconColor: .solWarning,
-                label: "Calendar (opțional)",
-                isOn: $vm.calendarEnabled
-            )
-        } header: {
-            sectionHeader("CONECTĂRI")
-        }
-    }
-
-    @ViewBuilder
-    private var notificationsSection: some View {
-        Section {
-            settingsRow(icon: "shield.lefthalf.filled", label: "Verificare spirală", value: nil) {
-                showSpiralAlert = true
-            }
-            settingsRow(icon: "clock.fill", label: "Sumar săptămânal", value: "Duminică 20:00") {}
-            settingsRow(icon: "exclamationmark.triangle.fill", label: "Alerte financiare", value: "Activate") {}
-        } header: {
-            sectionHeader("NOTIFICĂRI")
-        }
-    }
-
-    @ViewBuilder
-    private var subscriptionSection: some View {
-        Section {
-            HStack {
-                ZStack {
-                    RoundedRectangle(cornerRadius: SolRadius.sm, style: .continuous)
-                        .fill(Color.solMint.opacity(0.15))
-                        .frame(width: 32, height: 32)
-                    Image(systemName: "crown.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color.solMint)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Solomon Plus")
-                        .font(.solBodyMD)
-                        .foregroundStyle(Color.solTextPrimary)
-                    Text("39 RON/lună · Reînnoire pe 15 mai")
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solTextMuted)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.solTextMuted)
-            }
-            .listRowBackground(Color.solSurface)
-        } header: {
-            sectionHeader("ABONAMENT")
-        }
-    }
-
-    @ViewBuilder
-    private var aboutSection: some View {
-        Section {
-            settingsRow(icon: "cpu.fill", label: "Modelul LLM", value: nil) {
-                showModelDownload = true
-            }
-            settingsRow(icon: "info.circle.fill", label: "Despre Solomon", value: "v1.0.0") {}
-            settingsRow(icon: "lock.shield.fill", label: "Confidențialitate", value: nil) {}
-            settingsRow(icon: "doc.text.fill", label: "Termeni de utilizare", value: nil) {}
-
-            settingsToggleRow(
-                icon: "brain.head.profile",
-                iconColor: .solTextMuted,
-                label: "Contribuie la training (opt-in)",
-                isOn: $vm.trainingOptIn
-            )
-        } header: {
-            sectionHeader("DESPRE")
-        }
-    }
-
-    // MARK: - Helpers
-
-    @ViewBuilder
-    private func settingsRow(icon: String, label: String, value: String?, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: SolSpacing.md) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color.solTextSecondary)
-                    .frame(width: 24)
-                Text(label)
-                    .font(.solBodyMD)
-                    .foregroundStyle(Color.solTextPrimary)
-                Spacer()
-                if let value {
-                    Text(value)
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solTextMuted)
-                }
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.solTextMuted)
-            }
-        }
-        .listRowBackground(Color.solSurface)
-        .listRowSeparatorTint(Color.solBorder)
-    }
-
-    @ViewBuilder
-    private func settingsToggleRow(
-        icon: String,
-        iconColor: Color,
-        label: String,
-        isOn: Binding<Bool>
-    ) -> some View {
-        HStack(spacing: SolSpacing.md) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(iconColor)
-                .frame(width: 24)
-            Text(label)
-                .font(.solBodyMD)
-                .foregroundStyle(Color.solTextPrimary)
-            Spacer()
-            Toggle("", isOn: isOn)
-                .tint(Color.solMint)
-        }
-        .listRowBackground(Color.solSurface)
-        .listRowSeparatorTint(Color.solBorder)
-    }
-
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.solCaption)
-            .foregroundStyle(Color.solTextMuted)
-            .tracking(1.2)
     }
 }
 
@@ -393,7 +339,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var notificationsEnabled: Bool = false {
         didSet { persistConsent() }
     }
-    @Published var calendarEnabled: Bool = false  // Calendar EventKit nu e wired încă
+    @Published var calendarEnabled: Bool = false
     @Published var trainingOptIn: Bool = false {
         didSet { persistConsent() }
     }
@@ -403,13 +349,9 @@ final class SettingsViewModel: ObservableObject {
     private var isLoading: Bool = false
 
     var connectedBanksLabel: String {
-        if connectedBanks.isEmpty {
-            return "Setup în Shortcuts"
-        } else if connectedBanks.count == 1 {
-            return connectedBanks[0]
-        } else {
-            return "\(connectedBanks.count) bănci conectate"
-        }
+        if connectedBanks.isEmpty { return "Setup" }
+        if connectedBanks.count == 1 { return connectedBanks[0] }
+        return "\(connectedBanks.count) bănci"
     }
 
     func configure(persistence: SolomonPersistenceController) {

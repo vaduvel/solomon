@@ -1,70 +1,69 @@
 import SwiftUI
 import SolomonCore
 
-// MARK: - Ecran 2 — Identitate (30 sec)
-//
-// Conform spec §11 ecran 2:
-//   - Input: "Cum te cheamă?"
-//   - Toggle: "Cum vrei să-ți zic? [Pe nume / Formal]"
-//   - CTA: [Continuă →]
+// MARK: - Ecran 2 — Identitate (Apple HIG aligned)
 
 struct OnboardingScreen2Identity: View {
     @EnvironmentObject var state: OnboardingState
+    @FocusState private var nameFocused: Bool
 
     var body: some View {
-        VStack(spacing: SolSpacing.xl) {
-            VStack(spacing: SolSpacing.sm) {
-                Text("Hai să ne cunoaștem")
-                    .font(.solH1)
-                    .foregroundStyle(Color.solForeground)
+        ScrollView {
+            VStack(alignment: .leading, spacing: SolSpacing.xxl) {
 
-                Text("Cum te cheamă?")
-                    .font(.solBody)
-                    .foregroundStyle(Color.solMuted)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, SolSpacing.lg)
-
-            SolomonTextInput(
-                placeholder: "ex: Andrei",
-                text: $state.name,
-                icon: "person.fill"
-            )
-
-            VStack(alignment: .leading, spacing: SolSpacing.sm) {
-                Text("Cum vrei să-ți zic?")
-                    .font(.solCaption)
-                    .foregroundStyle(Color.solMuted)
-                    .textCase(.uppercase)
-                    .tracking(1.2)
-
-                HStack(spacing: SolSpacing.sm) {
-                    SelectableChip(
-                        title: "Pe nume (tu)",
-                        isSelected: state.addressing == .tu
-                    ) {
-                        state.addressing = .tu
-                    }
-                    SelectableChip(
-                        title: "Formal (dvs.)",
-                        isSelected: state.addressing == .dumneavoastra
-                    ) {
-                        state.addressing = .dumneavoastra
-                    }
-                    Spacer()
+                VStack(alignment: .leading, spacing: SolSpacing.xs) {
+                    Text("Hai să ne cunoaștem")
+                        .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(Color.solForeground)
+                    Text("Cum te cheamă?")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
                 }
+
+                // Name input
+                SolomonTextInput(
+                    placeholder: "ex: Andrei",
+                    text: $state.name,
+                    icon: "person.fill"
+                )
+                .focused($nameFocused)
+
+                // Addressing picker — segment control HIG
+                VStack(alignment: .leading, spacing: SolSpacing.sm) {
+                    Text("Cum vrei să-ți zic?")
+                        .solSectionHeader()
+
+                    Picker("Adresare", selection: $state.addressing) {
+                        Text("Pe nume (tu)").tag(Addressing.tu)
+                        Text("Formal (dvs.)").tag(Addressing.dumneavoastra)
+                    }
+                    .pickerStyle(.segmented)
+                    .tint(Color.solPrimary)
+                }
+
+                Spacer(minLength: SolSpacing.xxxl)
             }
-
-            Spacer()
-
+            .padding(.horizontal, SolSpacing.lg)
+            .padding(.top, SolSpacing.lg)
+        }
+        .scrollDismissesKeyboard(.immediately)
+        .safeAreaInset(edge: .bottom) {
             SolomonButton("Continuă", icon: "arrow.right") {
+                Haptics.medium()
                 state.next()
             }
             .opacity(state.canProceedFromCurrentStep ? 1 : 0.4)
             .disabled(!state.canProceedFromCurrentStep)
+            .padding(.horizontal, SolSpacing.lg)
+            .padding(.vertical, SolSpacing.base)
+            .background(.ultraThinMaterial)
         }
-        .padding(.horizontal, SolSpacing.screenHorizontal)
-        .padding(.bottom, SolSpacing.xl)
+        .onAppear {
+            Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                nameFocused = true
+            }
+        }
     }
 }
 

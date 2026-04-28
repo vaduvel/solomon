@@ -1,23 +1,19 @@
 import SwiftUI
 
-// MARK: - Ecran 1 — Welcome (15 sec)
+// MARK: - Ecran 1 — Welcome (Apple HIG aligned)
 //
-// Conform spec §11 ecran 1:
-//   - Logo Solomon
-//   - Tagline: "Înțelepciune pentru banii tăi"
-//   - 3 chips features
-//   - Subtitle: "100% pe telefonul tău. Datele nu pleacă nicăieri."
-//   - CTA: [Hai să ne cunoaștem →]
-//   - Mic text: "Durează 3 minute"
+// Pattern HIG: hero icon + tagline central + 3 feature rows + CTA bottom-anchored.
+// Spec §11 ecran 1 — păstrăm conținutul, refactor layout.
 
 struct OnboardingScreen1Welcome: View {
     @EnvironmentObject var state: OnboardingState
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer().frame(height: SolSpacing.xxl)
 
-            // Logo S în cerc gradient
+            Spacer()
+
+            // Logo gradient
             ZStack {
                 Circle()
                     .fill(LinearGradient.solHero)
@@ -27,45 +23,67 @@ struct OnboardingScreen1Welcome: View {
                     .font(.system(size: 48, weight: .bold))
                     .foregroundStyle(Color.solCanvas)
             }
-            .padding(.bottom, SolSpacing.lg)
 
-            Text("Solomon")
-                .font(.solDisplay)
-                .foregroundStyle(Color.solForeground)
+            VStack(spacing: SolSpacing.xs) {
+                Text("Solomon")
+                    .font(.largeTitle.weight(.bold))
+                    .foregroundStyle(Color.solForeground)
 
-            Text("Înțelepciune pentru banii tăi")
-                .font(.solBody)
-                .foregroundStyle(Color.solMuted)
-                .padding(.top, 4)
-
-            Spacer().frame(height: SolSpacing.xl)
-
-            // 3 feature chips
-            VStack(spacing: SolSpacing.sm) {
-                FeatureChip(title: "Învăț din comportamentul tău")
-                FeatureChip(title: "Îți arăt ce să faci cu banii")
-                FeatureChip(title: "Fără judecăți, doar fapte")
+                Text("Înțelepciune pentru banii tăi")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, SolSpacing.screenHorizontal)
+            .padding(.top, SolSpacing.xl)
+
+            Spacer().frame(height: SolSpacing.xxl)
+
+            // Feature rows (HIG list-like)
+            VStack(spacing: SolSpacing.base) {
+                featureRow(icon: "brain.head.profile", text: "Învăț din comportamentul tău")
+                featureRow(icon: "lightbulb.fill", text: "Îți arăt ce să faci cu banii")
+                featureRow(icon: "heart.fill", text: "Fără judecăți, doar fapte")
+            }
+            .padding(.horizontal, SolSpacing.lg)
 
             Spacer()
 
-            VStack(spacing: SolSpacing.sm) {
-                Text("100% pe telefonul tău. Datele nu pleacă nicăieri.")
-                    .font(.solCaption)
-                    .foregroundStyle(Color.solMuted)
-                    .multilineTextAlignment(.center)
+            // Privacy + CTA bottom
+            VStack(spacing: SolSpacing.base) {
+                HStack(spacing: SolSpacing.xs) {
+                    Image(systemName: "lock.shield.fill")
+                        .font(.footnote)
+                        .foregroundStyle(Color.solPrimary)
+                    Text("100% pe telefonul tău. Datele nu pleacă nicăieri.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
 
                 SolomonButton("Hai să ne cunoaștem", icon: "arrow.right") {
+                    Haptics.medium()
                     state.next()
                 }
 
                 Text("Durează 3 minute")
-                    .font(.solMicro)
-                    .foregroundStyle(Color.solMuted)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, SolSpacing.screenHorizontal)
-            .padding(.bottom, SolSpacing.xl)
+            .padding(.horizontal, SolSpacing.lg)
+            .padding(.bottom, SolSpacing.lg)
+        }
+    }
+
+    @ViewBuilder
+    private func featureRow(icon: String, text: String) -> some View {
+        HStack(spacing: SolSpacing.base) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(Color.solPrimary)
+                .frame(width: 32)
+                .symbolRenderingMode(.hierarchical)
+            Text(text)
+                .font(.body)
+                .foregroundStyle(Color.solForeground)
+            Spacer()
         }
     }
 }

@@ -1,85 +1,79 @@
 import SwiftUI
 
-// MARK: - Ecran 8 — Procesare (1-3 minute)
+// MARK: - Ecran 8 — Procesare (Apple HIG aligned)
 //
-// Conform spec §11 ecran 8:
-//   - Animație: "Mă uit la ultimele 6 luni..."
-//   - Progress bar cu sub-tasks vizibile:
-//     • Citesc emailurile financiare...
-//     • Identific tranzacții și abonamente...
-//     • Caut pattern-uri...
-//     • Pregătesc primul raport...
+// Pattern HIG: animated icon + title + subtitle + animated progress steps.
+// Folosim .symbolEffect(.pulse) iOS 17+ pentru animație nativ.
 
 struct OnboardingScreen8Processing: View {
     @EnvironmentObject var state: OnboardingState
 
-    @State private var pulseScale: CGFloat = 1.0
-
     var body: some View {
-        VStack(spacing: SolSpacing.lg) {
-            Spacer().frame(height: SolSpacing.xl)
+        VStack(spacing: 0) {
 
-            // Hero animated icon (sparkle pulsing)
-            ZStack {
-                Circle()
-                    .fill(LinearGradient.solHero)
-                    .frame(width: 88, height: 88)
-                    .blur(radius: 20)
-                    .opacity(0.6)
-                    .scaleEffect(pulseScale)
+            Spacer()
 
-                ZStack {
+            // Animated sparkle (HIG iOS 17+)
+            Image(systemName: "sparkles")
+                .font(.system(size: 64, weight: .light))
+                .foregroundStyle(LinearGradient.solHero)
+                .symbolEffect(.pulse, options: .repeating)
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 96, height: 96)
+                .background(
                     Circle()
-                        .stroke(Color.solPrimary, lineWidth: 2)
-                        .frame(width: 80, height: 80)
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 32, weight: .medium))
-                        .foregroundStyle(Color.solPrimary)
-                }
-            }
-            .onAppear {
-                withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
-                    pulseScale = 1.4
-                }
-            }
+                        .fill(Color.solPrimary.opacity(0.15))
+                )
+                .overlay(
+                    Circle()
+                        .stroke(Color.solPrimary.opacity(0.4), lineWidth: 2)
+                )
 
             VStack(spacing: SolSpacing.xs) {
                 Text("Solomon analizează...")
-                    .font(.solH2)
+                    .font(.title2.weight(.semibold))
                     .foregroundStyle(Color.solForeground)
                 Text("Mă uit la ultimele 6 luni de date.")
-                    .font(.solBody)
-                    .foregroundStyle(Color.solMuted)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
-            .padding(.top, SolSpacing.md)
+            .padding(.top, SolSpacing.lg)
 
-            Spacer().frame(height: SolSpacing.xl)
+            Spacer()
 
-            // Sub-tasks list
+            // Tasks list
             VStack(spacing: SolSpacing.sm) {
                 ForEach(state.processingTasks) { task in
                     ProcessingTaskRow(title: task.title, state: task.state)
                 }
             }
+            .padding(.horizontal, SolSpacing.lg)
 
             Spacer()
-
-            // CTA — apare doar când totul e done
-            if state.canProceedFromCurrentStep {
-                SolomonButton("Vezi primul raport", icon: "arrow.right") {
-                    state.next()
-                }
-                .transition(.opacity.combined(with: .scale))
-            } else {
-                Text("Te rugăm să aștepți...")
-                    .font(.solCaption)
-                    .foregroundStyle(Color.solMuted)
-            }
         }
-        .padding(.horizontal, SolSpacing.screenHorizontal)
-        .padding(.bottom, SolSpacing.xl)
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: SolSpacing.sm) {
+                if state.canProceedFromCurrentStep {
+                    SolomonButton("Vezi primul raport", icon: "arrow.right") {
+                        Haptics.medium()
+                        state.next()
+                    }
+                    .transition(.opacity.combined(with: .scale))
+                } else {
+                    Text("Te rugăm să aștepți...")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                }
+            }
+            .padding(.horizontal, SolSpacing.lg)
+            .padding(.vertical, SolSpacing.base)
+            .background(.ultraThinMaterial)
+            .animation(.smooth, value: state.canProceedFromCurrentStep)
+        }
         .task {
             await state.runSimulatedProcessing()
+            Haptics.success()
         }
     }
 }
