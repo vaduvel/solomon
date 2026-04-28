@@ -1,21 +1,25 @@
 import Foundation
 import SolomonCore
 
+#if canImport(MLXLLM) && canImport(MLXLMCommon)
+import MLX
+import MLXLLM
+import MLXLMCommon
+import MLXHuggingFace
+import HuggingFace
+import Tokenizers
+#endif
+
 // MARK: - MLXLLMProvider
 //
-// Provider on-device pentru Gemma 4 (E2B / E4B) folosind MLX Swift.
+// Provider on-device pentru Gemma 4 (E2B / E4B) folosind MLX Swift via shareup/mlx-swift-lm.
 // Apple-native, optimizat Metal/Apple Silicon.
 //
-// Stadiu Faza 26: SCAFFOLD COMPLET (provider stub + UI + download manager + state).
-// Implementarea inference reală se adaugă într-o iterație separată prin vendoring
-// MLXLLM source code din mlx-swift-examples (Apple nu publică MLXLLM ca SPM lib).
-//
-// Modele suportate:
+// Modele recomandate:
 //   - "mlx-community/gemma-2-2b-it-4bit"     ~1.5GB → iPhone 14+ (calibrare → E2B)
 //   - "mlx-community/gemma-2-9b-it-4bit"     ~5.0GB → iPhone 15 Pro+ (production → E4B)
 //
-// Când inference-ul e wired, calibrarea (system prompts, JSON contexts, max words)
-// rămâne IDENTICĂ — doar swap implementation.
+// Calibrarea (system prompts, JSON contexts, max words) e identică între cele 2 modele.
 
 public actor MLXLLMProvider: LLMProvider {
 
@@ -32,7 +36,7 @@ public actor MLXLLMProvider: LLMProvider {
         public static let gemmaE2B = Config(
             modelId: "mlx-community/gemma-2-2b-it-4bit",
             displayName: "Gemma 2 (2B)",
-            approximateSizeBytes: 1_550_000_000,    // ~1.5 GB
+            approximateSizeBytes: 1_550_000_000,
             maxTokens: 200,
             temperature: 0.4,
             topP: 0.9
@@ -41,7 +45,7 @@ public actor MLXLLMProvider: LLMProvider {
         public static let gemmaE4B = Config(
             modelId: "mlx-community/gemma-2-9b-it-4bit",
             displayName: "Gemma 2 (9B)",
-            approximateSizeBytes: 5_200_000_000,    // ~5 GB
+            approximateSizeBytes: 5_200_000_000,
             maxTokens: 240,
             temperature: 0.4,
             topP: 0.9
@@ -75,7 +79,10 @@ public actor MLXLLMProvider: LLMProvider {
 
     private let config: Config
     private var state: State = .notDownloaded
-    private var modelHandle: Any?    // placeholder pentru ModelContainer real
+
+    #if canImport(MLXLLM) && canImport(MLXLMCommon)
+    private var modelContainer: ModelContainer?
+    #endif
 
     // MARK: - Init
 
@@ -89,29 +96,35 @@ public actor MLXLLMProvider: LLMProvider {
     public func currentConfig() async -> Config { config }
     public func isModelLoaded() async -> Bool { if case .loaded = state { return true } else { return false } }
 
-    // MARK: - Download / preload
+    // MARK: - Preload
 
-    /// Verifică dacă modelul e descărcat local și-l încarcă în RAM.
-    /// Dacă lipsește, declanșează download de pe HuggingFace prin MLXModelDownloader.
-    /// Apelat la first launch (după onboarding) sau la upgrade model în Settings.
     public func preloadModel() async throws {
         if case .loaded = state { return }
 
-        let downloader = MLXModelDownloader()
+        #if canImport(MLXLLM) && canImport(MLXLMCommon)
         do {
-            try await downloader.ensureModelDownloaded(modelId: config.modelId) { [weak self] progress in
-                Task { await self?.updateProgress(progress) }
-            }
+            state = .downloading(progress: 0.0)
+            let configuration = ModelConfiguration(id: config.modelId)
 
-            // Real load: prin MLXLLM container (vendored ulterior).
-            // Pentru moment marcăm ca .loadFailed pentru ca MomentEngine
-            // să facă fallback la TemplateLLMProvider.
-            state = .loadFailed(reason: "MLX inference runtime nu e wired încă în această versiune")
-            throw LLMError.modelNotLoaded
+            // Folosim macro-urile MLXHuggingFace pentru download + tokenizer
+            let container = try await #huggingFaceLoadModelContainer(
+                configuration: configuration,
+                progressHandler: { progress in
+                    Task { [weak self] in
+                        await self?.updateProgress(progress.fractionCompleted)
+                    }
+                }
+            )
+            modelContainer = container
+            state = .loaded
         } catch {
             state = .loadFailed(reason: error.localizedDescription)
             throw error
         }
+        #else
+        state = .loadFailed(reason: "MLX runtime nu e disponibil pe această platformă")
+        throw LLMError.modelNotLoaded
+        #endif
     }
 
     private func updateProgress(_ progress: Double) {
@@ -120,22 +133,70 @@ public actor MLXLLMProvider: LLMProvider {
     }
 
     public func unloadModel() async {
-        modelHandle = nil
+        #if canImport(MLXLLM) && canImport(MLXLMCommon)
+        modelContainer = nil
+        #endif
         state = .notDownloaded
     }
 
-    // MARK: - LLMProvider
+    // MARK: - LLMProvider — generate
 
     public func generate(
         systemPrompt: String,
         userContext: String,
         maxWords: Int
     ) async throws -> String {
-        guard case .loaded = state else {
+        #if canImport(MLXLLM) && canImport(MLXLMCommon)
+        guard let container = modelContainer else {
             throw LLMError.modelNotLoaded
         }
-        // TODO Faza 26B: inference real prin MLXLLM container.
-        // Token loop, streaming output, max words enforcement.
-        throw LLMError.generationFailed(reason: "MLX inference runtime nu e wired în această versiune")
+
+        let chatPrompt = """
+        \(systemPrompt)
+
+        Context (JSON):
+        \(userContext)
+
+        Răspuns (max \(maxWords) cuvinte, în română):
+        """
+
+        let parameters = GenerateParameters(
+            temperature: config.temperature,
+            topP: config.topP
+        )
+
+        let result = try await container.perform { context in
+            let userInput = UserInput(prompt: .text(chatPrompt))
+            let lmInput = try await context.processor.prepare(input: userInput)
+
+            var output = ""
+            let stream = try MLXLMCommon.generate(
+                input: lmInput,
+                parameters: parameters,
+                context: context
+            )
+            for await item in stream {
+                switch item {
+                case .chunk(let text):
+                    output += text
+                    let wordCount = output.split { $0.isWhitespace }.count
+                    if wordCount > maxWords + 30 {
+                        return output
+                    }
+                case .info:
+                    continue
+                @unknown default:
+                    continue
+                }
+            }
+            return output
+        }
+
+        let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { throw LLMError.emptyResponse }
+        return trimmed
+        #else
+        throw LLMError.modelNotLoaded
+        #endif
     }
 }

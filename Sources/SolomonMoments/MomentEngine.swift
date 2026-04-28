@@ -21,8 +21,15 @@ public final class MomentEngine {
     private let spiralDetector = SpiralDetector()
     private let patternDetector = PatternDetector()
 
-    public init(llm: any LLMProvider = TemplateLLMProvider()) {
+    public init(llm: any LLMProvider = MomentEngine.defaultLLMProvider()) {
         self.llm = llm
+    }
+
+    /// Provider default: MLX (Gemma 2B real on-device) cu fallback la Template
+    /// dacă modelul nu e descărcat sau inferența eșuează.
+    public static func defaultLLMProvider() -> any LLMProvider {
+        let mlx = MLXLLMProvider(config: .gemmaE2B)
+        return SmartLLMProvider(primary: mlx, fallback: TemplateLLMProvider())
     }
 
     // MARK: - Snapshot
