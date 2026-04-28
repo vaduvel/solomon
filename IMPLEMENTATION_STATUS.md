@@ -1,6 +1,6 @@
 # Solomon — Implementation Status
 
-**Updated:** 2026-04-28 (Faza 29 commit)
+**Updated:** 2026-04-28 (Faza 30 commit)
 **Spec ref:** `SOLOMON-V1-MASTER-SPEC.md` (1.0 Final, 25 aprilie 2026)
 
 ---
@@ -42,7 +42,7 @@
 | 27 | ✅ | DS + UI Apple HIG iOS 26 Liquid Glass (Faza 28 în cod) |
 | 28 | ✅ | Faza iOS 26 native DS — semantic colors, full HIG |
 | **29** | ✅ | **5 gap-uri funcționale: MomentEngine 8 momente, BGTaskScheduler, UNUserNotificationCenter, Gemma 3 (4B), TodayView fix** |
-| 30 | ⏸ | App Icon + Launch Screen + Privacy Manifest |
+| **30** | ✅ | **App Icon (gradient S mint→cyan 1024px) + Launch Screen dark + PrivacyInfo.xcprivacy + SolomonWeb wire CanIAffordSheet** |
 | 31 | ⏸ | Privacy Policy / TOS / ASF disclaimer (legal) |
 | 32 | ⏸ | TestFlight beta (50 useri) |
 
@@ -97,10 +97,10 @@
 |---|---|---|
 | MLX prin fork shareup/mlx-swift-lm 0.0.14 | 🟡 | Upgrade la 0.0.15+ când rezolvă Sendable issues sub Swift 6 |
 | Swift 5 mode pe SolomonLLM | 🟡 | Temporar, revine la 6 după upgrade mlx-swift-lm |
-| App Icon = Xcode default | 🟠 | Faza 29 |
-| Launch Screen = default | 🟠 | Faza 29 |
-| `PrivacyInfo.xcprivacy` lipsește | 🔴 | Required iOS 17+ pentru App Store — Faza 29 |
-| SolomonWeb orfan în production | 🟡 | Wire-uiesc la CanIAfford / scam check live (Faza 28+) |
+| App Icon = Xcode default | ~~🟠~~ | ✅ Faza 30 — gradient S mint→cyan |
+| Launch Screen = default | ~~🟠~~ | ✅ Faza 30 — dark UILaunchScreen |
+| `PrivacyInfo.xcprivacy` lipsește | ~~🔴~~ | ✅ Faza 30 — present și valid |
+| SolomonWeb orfan în production | ~~🟡~~ | ✅ Faza 30 — wired la CanIAffordSheet |
 | `RecentMoments` în TodayView empty | 🟡 | Persist last N moments (Faza 27+) |
 | Calendar EventKit lipsește | 🟢 | Spec opțional v1 |
 | Gmail OAuth lipsește | 🟡 | Avem EmailParserSheet manual + Shortcuts strategy |

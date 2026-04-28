@@ -4,6 +4,7 @@ import SolomonStorage
 import SolomonAnalytics
 import SolomonMoments
 import SolomonLLM
+import SolomonWeb
 
 // MARK: - CanIAffordSheet
 //
@@ -21,8 +22,12 @@ struct CanIAffordSheet: View {
     @State private var isCalculating: Bool = false
     @State private var llmResponse: String?
     @State private var calculatedBudget: SafeToSpendBudget?
+    @State private var webSnippet: String?
+    @State private var isScamRisk: Bool = false
 
     private let calc = SafeToSpendCalculator()
+    private let webClient = SolomonWebClient()
+    private let scamMatcher = ScamPatternMatcher()
 
     var body: some View {
         NavigationStack {
@@ -175,12 +180,38 @@ struct CanIAffordSheet: View {
                     .foregroundStyle(Color.solForeground)
             }
 
+            if isScamRisk {
+                HStack(spacing: SolSpacing.sm) {
+                    Image(systemName: "exclamationmark.shield.fill")
+                        .foregroundStyle(Color.solDestructive)
+                    Text("Solomon a detectat risc de scam în descriere. Verifică sursa înainte să plătești.")
+                        .font(.solCaption)
+                        .foregroundStyle(Color.solDestructive)
+                }
+                .padding(SolSpacing.base)
+                .background(Color.solDestructive.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: SolRadius.lg))
+            }
+
             if let llm = llmResponse {
                 Divider().background(Color.solBorder)
                 Text(llm)
                     .font(.solBody)
                     .foregroundStyle(Color.solMuted)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let snippet = webSnippet {
+                Divider().background(Color.solBorder)
+                VStack(alignment: .leading, spacing: SolSpacing.xs) {
+                    Label("Context web", systemImage: "globe")
+                        .font(.solCaption)
+                        .foregroundStyle(Color.solMuted)
+                    Text(snippet)
+                        .font(.solCaption)
+                        .foregroundStyle(Color.solForeground)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             HStack(spacing: SolSpacing.sm) {
@@ -233,6 +264,8 @@ struct CanIAffordSheet: View {
         verdict = nil
         llmResponse = nil
         calculatedBudget = nil
+        webSnippet = nil
+        isScamRisk = false
     }
 
     private func calculate() async {
@@ -344,6 +377,25 @@ struct CanIAffordSheet: View {
                 isAboveAverageToday: false
             )
         )
+
+        // Scam check — rulează pe descrierea dată de user
+        if !description.isEmpty {
+            isScamRisk = scamMatcher.hasAnyRisk(in: description)
+        }
+
+        // Web search — price comparison dacă descrierea e non-trivială (> 3 cuvinte sau sumă mare)
+        if !description.isEmpty && (description.split(separator: " ").count >= 2 || amountValue >= 500) {
+            let query = WebSearchQuery(
+                text: "\(description) pret RON",
+                queryType: .priceComparison
+            )
+            if let result = try? await webClient.search(query) {
+                let snippet = result.answer ?? result.abstractText
+                if let s = snippet, !s.isEmpty {
+                    webSnippet = String(s.prefix(200))
+                }
+            }
+        }
 
         do {
             let builder = CanIAffordBuilder()

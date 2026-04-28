@@ -65,6 +65,9 @@ targets:
         BGTaskSchedulerPermittedIdentifiers:
           - ro.solomon.app.moment.refresh
           - ro.solomon.app.moment.weekly
+        # Launch Screen — dark branded, fără storyboard legacy
+        UILaunchScreen:
+          UIColorName: LaunchBackground
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ro.solomon.app
