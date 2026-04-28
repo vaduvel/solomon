@@ -117,10 +117,14 @@ struct SubscriptionAuditView: View {
 
     private func load() {
         let ctx = SolomonPersistenceController.shared.container.viewContext
-        let repo = CoreDataSubscriptionRepository(context: ctx)
-        let all = (try? repo.fetchAll()) ?? []
-        ghosts = all.filter { $0.isGhost }
-        keptActive = all.filter { !$0.isGhost }
+        let subRepo = CoreDataSubscriptionRepository(context: ctx)
+        let txRepo = CoreDataTransactionRepository(context: ctx)
+        let raw = (try? subRepo.fetchAll()) ?? []
+        let txs = (try? txRepo.fetchAll()) ?? []
+        // Auto-enrich cu utilizare reală
+        let enriched = SubscriptionUsageDetector().enrichWithUsage(subscriptions: raw, transactions: txs)
+        ghosts = enriched.filter { $0.isGhost }
+        keptActive = enriched.filter { !$0.isGhost }
     }
 
     private func cancel(subscription: Subscription) {

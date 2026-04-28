@@ -1,6 +1,7 @@
 import SwiftUI
 import SolomonCore
 import SolomonStorage
+import SolomonAnalytics
 
 // MARK: - WalletView (Tab 3 — Portofel)
 //
@@ -473,6 +474,7 @@ final class WalletViewModel: ObservableObject {
     private var transactionRepo: (any TransactionRepository)?
     private var obligationRepo: (any ObligationRepository)?
     private var subscriptionRepo: (any SubscriptionRepository)?
+    private let usageDetector = SubscriptionUsageDetector()
 
     func configure(persistence: SolomonPersistenceController) {
         let ctx = persistence.container.viewContext
@@ -483,7 +485,10 @@ final class WalletViewModel: ObservableObject {
 
     func load() async {
         obligations  = (try? obligationRepo?.fetchAll()) ?? []
-        subscriptions = (try? subscriptionRepo?.fetchAll()) ?? []
+        let allTx = (try? transactionRepo?.fetchAll()) ?? []
+        let rawSubs = (try? subscriptionRepo?.fetchAll()) ?? []
+        // Auto-enrich lastUsedDaysAgo prin matching tranzacții
+        subscriptions = usageDetector.enrichWithUsage(subscriptions: rawSubs, transactions: allTx)
         transactions = (try? transactionRepo?.fetchRecent(limit: 50)) ?? []
     }
 

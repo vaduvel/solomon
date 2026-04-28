@@ -36,6 +36,9 @@ public final class NotificationIngestionService: ObservableObject {
     /// Ultima tranzacție parsată — UI poate observa pentru feedback instant.
     @Published public private(set) var lastIngested: Transaction?
 
+    /// Dacă ultima ingestie e o tranzacție IFN — UI ridică alertă specifică.
+    @Published public private(set) var lastIFNAlert: IFNRecord?
+
     /// Numărul total de tranzacții ingested în sesiunea curentă.
     @Published public private(set) var sessionCount: Int = 0
 
@@ -109,11 +112,20 @@ public final class NotificationIngestionService: ObservableObject {
             lastIngested = transaction
             sessionCount += 1
             lastError = nil
+
+            // Flag IFN incoming alert dacă merchant matches
+            lastIFNAlert = BankNotificationParser.detectIFNRecord(in: rawParam)
+
             return true
         } catch {
             lastError = .storageFailed(error.localizedDescription)
             return false
         }
+    }
+
+    /// Resetează alerta IFN după ce UI-ul a afișat-o.
+    public func clearIFNAlert() {
+        lastIFNAlert = nil
     }
 
     // MARK: - Errors

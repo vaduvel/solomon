@@ -159,6 +159,84 @@ public struct DisplayMoment: Identifiable, Sendable {
     }
 }
 
+// MARK: - Mapper from MomentOutput
+
+import SolomonCore
+import SolomonMoments
+
+public extension DisplayMoment {
+
+    /// Convertește un MomentOutput (din SolomonMoments) într-un DisplayMoment pentru UI.
+    static func from(_ output: MomentOutput) -> DisplayMoment {
+        DisplayMoment(
+            momentTypeRaw: output.momentType.rawValue,
+            title: titleFor(output.momentType),
+            subtitle: subtitleFor(output.momentType),
+            llmResponse: output.llmResponse,
+            generatedAt: output.generatedAt,
+            accentColor: accentColorFor(output.momentType),
+            systemIconName: iconFor(output.momentType),
+            badge: badgeFor(output.momentType)
+        )
+    }
+
+    private static func titleFor(_ type: MomentType) -> String {
+        switch type {
+        case .wowMoment:           return "Primul tău raport"
+        case .canIAfford:          return "Verificare rapidă"
+        case .payday:              return "Salariul a intrat"
+        case .upcomingObligation:  return "Plată care urmează"
+        case .patternAlert:        return "Tipar nou detectat"
+        case .subscriptionAudit:   return "Audit abonamente"
+        case .spiralAlert:         return "Atenție — presiune financiară"
+        case .weeklySummary:       return "Săptămâna ta"
+        }
+    }
+
+    private static func subtitleFor(_ type: MomentType) -> String {
+        switch type {
+        case .wowMoment:           return "Solomon a analizat ultimele luni"
+        case .canIAfford:          return "Pot să-mi permit?"
+        case .payday:              return "Alocare automată"
+        case .upcomingObligation:  return "Pregătește-te pentru plată"
+        case .patternAlert:        return "Observație Solomon"
+        case .subscriptionAudit:   return "Lunar — verificare automată"
+        case .spiralAlert:         return "Plan de recuperare disponibil"
+        case .weeklySummary:       return "Sumar duminică"
+        }
+    }
+
+    private static func iconFor(_ type: MomentType) -> String {
+        switch type {
+        case .wowMoment:           return "sparkles"
+        case .canIAfford:          return "questionmark.circle.fill"
+        case .payday:              return "banknote.fill"
+        case .upcomingObligation:  return "calendar.badge.exclamationmark"
+        case .patternAlert:        return "chart.line.uptrend.xyaxis"
+        case .subscriptionAudit:   return "scissors"
+        case .spiralAlert:         return "exclamationmark.triangle.fill"
+        case .weeklySummary:       return "chart.bar.fill"
+        }
+    }
+
+    private static func accentColorFor(_ type: MomentType) -> Color {
+        switch type {
+        case .spiralAlert:         return .solDestructive
+        case .upcomingObligation:  return .solWarning
+        case .canIAfford, .patternAlert: return .solCyan
+        default:                   return .solPrimary
+        }
+    }
+
+    private static func badgeFor(_ type: MomentType) -> String? {
+        switch type {
+        case .spiralAlert:         return "URGENT"
+        case .upcomingObligation:  return "Atenție"
+        default:                   return nil
+        }
+    }
+}
+
 // MARK: - Preview helpers
 
 extension DisplayMoment {

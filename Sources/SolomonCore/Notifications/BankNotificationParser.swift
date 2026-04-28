@@ -27,7 +27,14 @@ public enum BankNotificationParser {
 
         guard let extracted = extractAmountAndMerchant(from: normalized) else { return nil }
 
-        let category = MerchantCategoryMatcher.category(for: extracted.merchant ?? "")
+        // IFN check first — dacă merchant matches IFN registry, override la loansIFN
+        let merchantClean = extracted.merchant ?? ""
+        let ifnRecord = IFNDatabase.all.first { ifn in
+            merchantClean.lowercased().contains(ifn.name.lowercased())
+        }
+        let category: TransactionCategory = ifnRecord != nil
+            ? .loansIFN
+            : MerchantCategoryMatcher.category(for: merchantClean)
         let direction = determineDirection(from: normalized, amount: extracted.amount)
 
         // Money stochează sume ca Int RON (spec §6.1).
@@ -53,6 +60,15 @@ public enum BankNotificationParser {
         let hasMoney = amountPattern.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)) != nil
         let hasKeyword = bankKeywords.contains { lower.contains($0) }
         return hasMoney && hasKeyword
+    }
+
+    /// Returnează IFNRecord dacă tranzacția e debit din IFN, altfel nil.
+    /// Folosit pentru a declanșa push alert imediat după ingestie.
+    public static func detectIFNRecord(in text: String) -> IFNRecord? {
+        let lower = text.lowercased()
+        return IFNDatabase.all.first { ifn in
+            lower.contains(ifn.name.lowercased())
+        }
     }
 
     // MARK: - Internal Types

@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var showShortcutSetup = false
     @State private var showProfileEdit = false
     @State private var showGoalsList = false
+    @State private var showSpiralAlert = false
     @State private var showDebugAlert: DebugAlertKind?
 
     enum DebugAlertKind: Identifiable {
@@ -70,6 +71,12 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showGoalsList) {
                 GoalsListView()
+            }
+            .sheet(isPresented: $showSpiralAlert) {
+                SpiralAlertView()
+            }
+            .onAppear {
+                vm.configure(persistence: SolomonPersistenceController.shared)
             }
             .alert(item: $showDebugAlert) { kind in
                 switch kind {
@@ -241,6 +248,9 @@ struct SettingsView: View {
     @ViewBuilder
     private var notificationsSection: some View {
         Section {
+            settingsRow(icon: "shield.lefthalf.filled", label: "Verificare spirală", value: nil) {
+                showSpiralAlert = true
+            }
             settingsRow(icon: "clock.fill", label: "Sumar săptămânal", value: "Duminică 20:00") {}
             settingsRow(icon: "exclamationmark.triangle.fill", label: "Alerte financiare", value: "Activate") {}
         } header: {
@@ -360,13 +370,22 @@ struct SettingsView: View {
 
 @MainActor
 final class SettingsViewModel: ObservableObject {
-    @Published var userName = "Andrei"
-    @Published var userPlan = "Solomon Plus · Activ"
-    @Published var isGmailConnected = true
-    @Published var notificationsEnabled = true
-    @Published var calendarEnabled = false
-    @Published var trainingOptIn = false
-    @Published var connectedBanks: [String] = []   // populat după setup Shortcuts
+    @Published var userName: String = "..."
+    @Published var userPlan: String = "Solomon Plus · Activ"
+    @Published var isGmailConnected: Bool = false {
+        didSet { persistConsent() }
+    }
+    @Published var notificationsEnabled: Bool = false {
+        didSet { persistConsent() }
+    }
+    @Published var calendarEnabled: Bool = false  // Calendar EventKit nu e wired încă
+    @Published var trainingOptIn: Bool = false {
+        didSet { persistConsent() }
+    }
+    @Published var connectedBanks: [String] = []
+
+    private var userProfileRepo: (any UserProfileRepository)?
+    private var isLoading: Bool = false
 
     var connectedBanksLabel: String {
         if connectedBanks.isEmpty {
@@ -376,6 +395,37 @@ final class SettingsViewModel: ObservableObject {
         } else {
             return "\(connectedBanks.count) bănci conectate"
         }
+    }
+
+    func configure(persistence: SolomonPersistenceController) {
+        let ctx = persistence.container.viewContext
+        self.userProfileRepo = CoreDataUserProfileRepository(context: ctx)
+        load()
+    }
+
+    func load() {
+        isLoading = true
+        defer { isLoading = false }
+        guard let repo = userProfileRepo else { return }
+        if let profile = try? repo.fetchProfile() {
+            userName = profile.demographics.name
+        }
+        if let consent = try? repo.fetchConsent() {
+            isGmailConnected = consent.emailAccessGranted
+            notificationsEnabled = consent.notificationsGranted
+            trainingOptIn = consent.datasetOptIn
+        }
+    }
+
+    private func persistConsent() {
+        guard !isLoading, let repo = userProfileRepo else { return }
+        let consent = UserConsent(
+            emailAccessGranted: isGmailConnected,
+            notificationsGranted: notificationsEnabled,
+            datasetOptIn: trainingOptIn,
+            onboardingComplete: OnboardingState.hasCompletedOnboarding
+        )
+        try? repo.saveConsent(consent)
     }
 }
 

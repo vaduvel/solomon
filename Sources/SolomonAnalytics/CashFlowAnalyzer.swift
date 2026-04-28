@@ -170,7 +170,7 @@ public struct CashFlowAnalyzer: Sendable {
         return savingsRatio > 0 ? .barelyBreakeven : .slidingNegative
     }
 
-    static func empty(windowDays: Int) -> CashFlowAnalysis {
+    public static func empty(windowDays: Int) -> CashFlowAnalysis {
         CashFlowAnalysis(
             windowDays: windowDays, analyzedMonths: 0,
             monthlyIncomeAvg: 0, monthlyIncomeLowest: nil, monthlyIncomeHighest: nil,

@@ -186,51 +186,6 @@ struct TodayView: View {
     }
 }
 
-// MARK: - CanIAfford Quick Sheet (placeholder)
-
-struct CanIAffordSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var query = ""
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.solCanvas.ignoresSafeArea()
-                VStack(spacing: SolSpacing.xl) {
-                    Text("Cât costă?")
-                        .font(.solHeadingXL)
-                        .foregroundStyle(Color.solTextPrimary)
-
-                    TextField("ex: pizza de la Glovo", text: $query)
-                        .font(.solBodyLG)
-                        .foregroundStyle(Color.solTextPrimary)
-                        .padding(SolSpacing.base)
-                        .solCard()
-                        .padding(.horizontal, SolSpacing.screenHorizontal)
-
-                    SolomonButton("Solomon, pot?") {
-                        dismiss()
-                    }
-                    .padding(.horizontal, SolSpacing.screenHorizontal)
-
-                    Spacer()
-                }
-                .padding(.top, SolSpacing.xxl)
-            }
-            .navigationTitle("Pot să-mi permit?")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Anulează") { dismiss() }
-                        .foregroundStyle(Color.solTextSecondary)
-                }
-            }
-        }
-        .presentationDetents([.medium])
-        .presentationBackground(Color.solSurface)
-    }
-}
-
 // MARK: - Preview
 
 #Preview {

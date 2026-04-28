@@ -10,9 +10,12 @@ import SolomonAnalytics
 
 struct GoalsListView: View {
 
-    @State private var goals: [Goal] = []
+    @State private var goalReports: [GoalProgressReport] = []
     @State private var showAddGoal = false
     @State private var editingGoal: Goal?
+
+    private let goalProgress = GoalProgress()
+    private let cashFlow = CashFlowAnalyzer()
 
     var body: some View {
         NavigationStack {
@@ -21,12 +24,12 @@ struct GoalsListView: View {
 
                 ScrollView {
                     VStack(spacing: SolSpacing.md) {
-                        if goals.isEmpty {
+                        if goalReports.isEmpty {
                             emptyState
                         } else {
-                            ForEach(goals) { goal in
-                                GoalCard(goal: goal) {
-                                    editingGoal = goal
+                            ForEach(goalReports, id: \.goal.id) { report in
+                                GoalCard(report: report) {
+                                    editingGoal = report.goal
                                 }
                             }
                         }
@@ -84,16 +87,27 @@ struct GoalsListView: View {
 
     private func load() {
         let ctx = SolomonPersistenceController.shared.container.viewContext
-        let repo = CoreDataGoalRepository(context: ctx)
-        goals = (try? repo.fetchAll()) ?? []
+        let goalRepo = CoreDataGoalRepository(context: ctx)
+        let txRepo = CoreDataTransactionRepository(context: ctx)
+        let goals = (try? goalRepo.fetchAll()) ?? []
+
+        // Calculează savings pace din cash flow analysis
+        let transactions = (try? txRepo.fetchAll()) ?? []
+        let analysis = cashFlow.analyze(transactions: transactions)
+        let pace = analysis.monthlySavingsAvg
+
+        // Generează GoalProgressReport per goal
+        goalReports = goals.map { goalProgress.evaluate(goal: $0, monthlyCurrentSavingPace: pace) }
     }
 }
 
 // MARK: - GoalCard
 
 struct GoalCard: View {
-    let goal: Goal
+    let report: GoalProgressReport
     let onTap: () -> Void
+
+    private var goal: Goal { report.goal }
 
     var body: some View {
         Button(action: onTap) {
@@ -120,12 +134,29 @@ struct GoalCard: View {
                 }
 
                 NeonProgressBar(
-                    progress: goal.progressFraction,
-                    variant: .success,
+                    progress: report.progressFraction,
+                    variant: variantForFeasibility,
                     label: "\(goal.amountSaved.amount) / \(goal.amountTarget.amount) RON",
-                    trailing: "\(Int(goal.progressFraction * 100))%"
+                    trailing: "\(Int(report.progressFraction * 100))%"
                 )
 
+                // Feasibility info
+                HStack(spacing: SolSpacing.xs) {
+                    Image(systemName: feasibilityIcon)
+                        .font(.system(size: 11))
+                        .foregroundStyle(feasibilityColor)
+                    Text(report.feasibility.displayNameRO)
+                        .font(.solCaption)
+                        .foregroundStyle(feasibilityColor)
+                    Spacer()
+                    if report.monthlyRequired.amount > 0 {
+                        Text("\(report.monthlyRequired.amount) RON/lună necesar")
+                            .font(.solCaption)
+                            .foregroundStyle(Color.solMuted)
+                    }
+                }
+
+                // Deadline info
                 HStack {
                     Image(systemName: "calendar")
                         .font(.system(size: 11))
@@ -134,10 +165,10 @@ struct GoalCard: View {
                         .font(.solCaption)
                         .foregroundStyle(Color.solMuted)
                     Spacer()
-                    if let monthsLeft = monthsUntil(goal.deadline) {
+                    if report.monthsRemaining > 0 {
                         StatusBadge(
-                            title: "\(monthsLeft) luni",
-                            kind: monthsLeft <= 3 ? .warning : .neutral
+                            title: "\(report.monthsRemaining) luni",
+                            kind: report.monthsRemaining <= 3 ? .warning : .neutral
                         )
                     }
                 }
@@ -146,6 +177,31 @@ struct GoalCard: View {
             .solCard()
         }
         .buttonStyle(.plain)
+    }
+
+    private var variantForFeasibility: NeonProgressBar.Variant {
+        switch report.feasibility {
+        case .easy, .onTrack:               return .success
+        case .challengingButPossible:       return .warning
+        case .unrealistic:                  return .danger
+        }
+    }
+
+    private var feasibilityIcon: String {
+        switch report.feasibility {
+        case .easy:                         return "hare.fill"
+        case .onTrack:                      return "checkmark.circle.fill"
+        case .challengingButPossible:       return "exclamationmark.triangle.fill"
+        case .unrealistic:                  return "xmark.octagon.fill"
+        }
+    }
+
+    private var feasibilityColor: Color {
+        switch report.feasibility {
+        case .easy, .onTrack:               return .solPrimary
+        case .challengingButPossible:       return .solWarning
+        case .unrealistic:                  return .solDestructive
+        }
     }
 
     private func iconFor(_ kind: GoalKind) -> String {
@@ -175,12 +231,6 @@ struct GoalCard: View {
         f.dateFormat = "d MMM yyyy"
         f.locale = Locale(identifier: "ro_RO")
         return f.string(from: date)
-    }
-
-    private func monthsUntil(_ date: Date) -> Int? {
-        let cal = Calendar.current
-        let comps = cal.dateComponents([.month], from: Date(), to: date)
-        return comps.month
     }
 }
 

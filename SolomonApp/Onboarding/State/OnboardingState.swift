@@ -182,6 +182,15 @@ final class OnboardingState: ObservableObject {
         let profile = UserProfile(demographics: demographic, financials: financial)
         try userProfileRepository.saveProfile(profile)
 
+        // Persist consents
+        let consent = UserConsent(
+            emailAccessGranted: gmailConnected,
+            notificationsGranted: pushAllowed,
+            datasetOptIn: trainingOptIn,
+            onboardingComplete: true
+        )
+        try userProfileRepository.saveConsent(consent)
+
         // Obligații draft → Obligation
         for d in draftObligations where !d.name.isEmpty && d.amountRON > 0 {
             let obligation = Obligation(
