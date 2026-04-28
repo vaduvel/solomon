@@ -1,6 +1,6 @@
 # Solomon — Implementation Status
 
-**Updated:** 2026-04-28
+**Updated:** 2026-04-28 (Faza 29 commit)
 **Spec ref:** `SOLOMON-V1-MASTER-SPEC.md` (1.0 Final, 25 aprilie 2026)
 
 ---
@@ -39,11 +39,12 @@
 | 25 | ✅ | Wire all orphans (TemplateLLM + MomentEngine + UserConsent + GoalProgress + etc.) |
 | 26A | ✅ | MLX scaffold (provider + downloader + UI) |
 | 26B | ✅ | **Gemma 2B REAL on-device via MLXLLM (shareup/mlx-swift-lm)** |
-| **27** | 🔄 **NEXT** | **DS + UI Apple HIG (cercetare + aplicare)** |
-| 28 | ⏸ | Gemma 9B / E4B pentru iPhone 15 Pro+ (după calibrare E2B) |
-| 29 | ⏸ | App Icon + Launch Screen + Privacy Manifest |
-| 30 | ⏸ | Privacy Policy / TOS / ASF disclaimer (legal) |
-| 31 | ⏸ | TestFlight beta (50 useri) |
+| 27 | ✅ | DS + UI Apple HIG iOS 26 Liquid Glass (Faza 28 în cod) |
+| 28 | ✅ | Faza iOS 26 native DS — semantic colors, full HIG |
+| **29** | ✅ | **5 gap-uri funcționale: MomentEngine 8 momente, BGTaskScheduler, UNUserNotificationCenter, Gemma 3 (4B), TodayView fix** |
+| 30 | ⏸ | App Icon + Launch Screen + Privacy Manifest |
+| 31 | ⏸ | Privacy Policy / TOS / ASF disclaimer (legal) |
+| 32 | ⏸ | TestFlight beta (50 useri) |
 
 ---
 
