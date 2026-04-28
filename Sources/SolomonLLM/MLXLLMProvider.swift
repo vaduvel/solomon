@@ -6,8 +6,8 @@ import MLX
 import MLXLLM
 import MLXLMCommon
 import MLXHuggingFace
-import HuggingFace
-import Tokenizers
+@preconcurrency import HuggingFace
+@preconcurrency import Tokenizers
 #endif
 
 // MARK: - MLXLLMProvider
@@ -183,7 +183,7 @@ public actor MLXLLMProvider: LLMProvider {
                     if wordCount > maxWords + 30 {
                         return output
                     }
-                case .info:
+                case .info, .toolCall:
                     continue
                 @unknown default:
                     continue
