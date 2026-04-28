@@ -17,9 +17,9 @@ let package = Package(
         .library(name: "SolomonMoments", targets: ["SolomonMoments"])
     ],
     dependencies: [
-        // MLX Swift will be added in a separate iteration once SolomonLLM
-        // module needs real inference. Keeping the scaffold dependency-free
-        // so `swift build` is fast and reproducible.
+        // Faza 26: scaffold MLX integration. Real LLM inference va fi adăugat
+        // odată cu vendoring-ul MLXLLM source code din mlx-swift-examples
+        // (Apple nu publică MLXLLM ca SPM library standalone).
     ],
     targets: [
         .target(name: "SolomonCore"),

@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var showGoalsList = false
     @State private var showSpiralAlert = false
     @State private var showEmailParser = false
+    @State private var showModelDownload = false
     @State private var showDebugAlert: DebugAlertKind?
 
     enum DebugAlertKind: Identifiable {
@@ -78,6 +79,9 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showEmailParser) {
                 EmailParserSheet()
+            }
+            .sheet(isPresented: $showModelDownload) {
+                ModelDownloadView()
             }
             .onAppear {
                 vm.configure(persistence: SolomonPersistenceController.shared)
@@ -300,6 +304,9 @@ struct SettingsView: View {
     @ViewBuilder
     private var aboutSection: some View {
         Section {
+            settingsRow(icon: "cpu.fill", label: "Modelul LLM", value: nil) {
+                showModelDownload = true
+            }
             settingsRow(icon: "info.circle.fill", label: "Despre Solomon", value: "v1.0.0") {}
             settingsRow(icon: "lock.shield.fill", label: "Confidențialitate", value: nil) {}
             settingsRow(icon: "doc.text.fill", label: "Termeni de utilizare", value: nil) {}
