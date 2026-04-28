@@ -42,11 +42,11 @@ struct TodayView: View {
 
                     Spacer(minLength: SolSpacing.xxxl)
                 }
-                .padding(.top, SolSpacing.sm)
+                .padding(.top, SolSpacing.base)
             }
             .background(Color.solCanvas)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("Solomon")
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -57,11 +57,6 @@ struct TodayView: View {
                             .font(.body.weight(.medium))
                             .foregroundStyle(Color.solForeground)
                     }
-                }
-                ToolbarItem(placement: .principal) {
-                    Text("Solomon")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(Color.solForeground)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {

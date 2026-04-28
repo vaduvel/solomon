@@ -57,6 +57,14 @@ targets:
           - CFBundleURLName: ro.solomon.app.urlscheme
             CFBundleURLSchemes:
               - solomon
+        # Background execution modes
+        UIBackgroundModes:
+          - fetch
+          - processing
+        # BGTaskScheduler task identifiers (trebuie să coincidă cu codul din BackgroundTaskService)
+        BGTaskSchedulerPermittedIdentifiers:
+          - ro.solomon.app.moment.refresh
+          - ro.solomon.app.moment.weekly
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ro.solomon.app

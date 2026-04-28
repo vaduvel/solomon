@@ -104,6 +104,11 @@ struct ModelDownloadView: View {
                     config: .gemmaE2B
                 )
                 modelOption(
+                    title: "Gemma 3 (4B) ✦ Recomandat",
+                    subtitle: "~2.8 GB · iPhone 15 Pro+",
+                    config: .gemma3_4b
+                )
+                modelOption(
                     title: "Gemma 2 (9B)",
                     subtitle: "~5 GB · iPhone 15 Pro+",
                     config: .gemmaE4B

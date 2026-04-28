@@ -128,14 +128,426 @@ public final class MomentEngine {
             ? buildSubscriptionAuditContext(snapshot: snapshot, audit: subAudit)
             : nil
 
-        // 3. Wow Moment fallback (default)
+        // 3. Payday Magic — salariu mare primit în ultimele 48h
+        let paydayCtx = buildPaydayContext(snapshot: snapshot, cashFlow: cashFlow)
+
+        // 4. Upcoming Obligation — obligație care scade în ≤ 5 zile
+        let upcomingCtx = buildUpcomingObligationContext(snapshot: snapshot, cashFlow: cashFlow)
+
+        // 5. Pattern Alert — PatternDetector găsește ceva semnificativ
+        let patternCtx = buildPatternAlertContext(snapshot: snapshot)
+
+        // 6. Weekly Summary — duminică sau luni
+        let weeklyCtx = buildWeeklySummaryContext(snapshot: snapshot, cashFlow: cashFlow)
+
+        // 7. Wow Moment fallback (default)
         let wowCtx = buildWowMomentContext(snapshot: snapshot)
 
         return MomentCandidates(
             wowMoment: wowCtx,
+            payday: paydayCtx,
+            upcomingObligation: upcomingCtx,
+            patternAlert: patternCtx,
             subscriptionAudit: subCtx,
-            spiralAlert: spiralCtx
+            spiralAlert: spiralCtx,
+            weeklySummary: weeklyCtx
         )
+    }
+
+    // MARK: - Payday context builder
+
+    private func buildPaydayContext(snapshot: Snapshot, cashFlow: CashFlowAnalysis) -> PaydayContext? {
+        let cal = Calendar.current
+        let now = snapshot.referenceDate
+        guard let cutoff = cal.date(byAdding: .hour, value: -48, to: now) else { return nil }
+
+        // Detectează o tranzacție incoming mare (salariu) în ultimele 48h
+        let recentIncoming = snapshot.transactions
+            .filter { $0.isIncoming && $0.date >= cutoff && $0.amount.amount >= 1000 }
+            .sorted { $0.amount.amount > $1.amount.amount }
+            .first
+
+        guard let salaryTx = recentIncoming else { return nil }
+
+        let avgIncome = cashFlow.monthlyIncomeAvg.amount
+        let received = salaryTx.amount.amount
+        let isHigher = avgIncome > 0 && Double(received) > Double(avgIncome) * 1.10
+        let isLower  = avgIncome > 0 && Double(received) < Double(avgIncome) * 0.90
+
+        let salary = PaydaySalary(
+            amountReceived: salaryTx.amount,
+            receivedDate: salaryTx.date,
+            source: salaryTx.merchant ?? "Angajator",
+            isHigherThanAverage: isHigher,
+            isLowerThanAverage: isLower
+        )
+
+        let paydayDay = paydayDayOfMonth(snapshot: snapshot)
+        let daysUntilNext = daysUntilDayOfMonth(paydayDay, from: now)
+
+        let obligations = snapshot.obligations
+        let obligReserves = obligations.map { o in
+            PaydayObligationReserve(name: o.name, amount: o.amount, status: .rezervat)
+        }
+        let obligTotal = obligations.reduce(Money(0)) { $0 + $1.amount }
+
+        let activeSubs = snapshot.subscriptions.filter { !$0.isGhost }
+        let subReserves = activeSubs.prefix(5).map { s in
+            PaydaySubscriptionReserve(name: s.name, amount: s.amountMonthly)
+        }
+        let subTotal = activeSubs.reduce(Money(0)) { $0 + $1.amountMonthly }
+
+        let available = Money(max(0, received - obligTotal.amount - subTotal.amount))
+        let perDay = daysUntilNext > 0 ? Money(available.amount / daysUntilNext) : Money(0)
+
+        let allocation = PaydayAllocation(
+            obligationsReserved: obligReserves,
+            subscriptionsReserved: Array(subReserves),
+            obligationsTotal: obligTotal,
+            subscriptionsTotal: subTotal,
+            savingsAuto: PaydaySavingsAuto(enabled: false),
+            availableToSpend: available,
+            daysUntilNextPayday: daysUntilNext,
+            availablePerDay: perDay
+        )
+
+        let comparisons = PaydayComparisons(
+            vsLastMonthAvailable: available,
+            vsLastMonthDiff: Money(0),
+            vsLastMonthDirection: .same
+        )
+
+        let budgets = cashFlow.spendingByCategory
+            .sorted { $0.value.amount > $1.value.amount }
+            .prefix(3)
+            .map { (cat, amt) in CategoryBudgetSuggestion(category: cat, amount: amt, basedOn: .average) }
+
+        var warnings: [PaydayWarning] = []
+        let oblRatio = avgIncome > 0 ? Double(obligTotal.amount) / Double(avgIncome) : 0
+        if oblRatio > 0.5 {
+            warnings.append(PaydayWarning(
+                type: .obligationsTooHigh,
+                description: "Obligațiile reprezintă \(Int(oblRatio * 100))% din venit",
+                impact: "Rămân \(available.amount) RON disponibil"
+            ))
+        }
+        if available.amount < 500 {
+            warnings.append(PaydayWarning(
+                type: .lowAvailable,
+                description: "Suma disponibilă după obligații: \(available.amount) RON",
+                impact: "≈ \(perDay.amount) RON/zi"
+            ))
+        }
+
+        return PaydayContext(
+            user: buildMomentUser(snapshot: snapshot),
+            salary: salary,
+            autoAllocation: allocation,
+            comparisons: comparisons,
+            categoryBudgetsSuggested: Array(budgets),
+            warnings: warnings
+        )
+    }
+
+    // MARK: - Upcoming Obligation context builder
+
+    private func buildUpcomingObligationContext(snapshot: Snapshot, cashFlow: CashFlowAnalysis) -> UpcomingObligationContext? {
+        let cal = Calendar.current
+        let now = snapshot.referenceDate
+        let today = cal.component(.day, from: now)
+
+        // Obligație care scade în 1–5 zile
+        let candidate = snapshot.obligations.compactMap { o -> (Obligation, Int)? in
+            var days = o.dayOfMonth - today
+            if days <= 0 {
+                let daysInMonth = cal.range(of: .day, in: .month, for: now)?.count ?? 30
+                days = daysInMonth - today + o.dayOfMonth
+            }
+            return days >= 1 && days <= 5 ? (o, days) : nil
+        }.sorted { $0.1 < $1.1 }.first
+
+        guard let (obligation, daysUntil) = candidate else { return nil }
+
+        let dueDate = cal.date(byAdding: .day, value: daysUntil, to: now) ?? now
+
+        // Sold estimat curent: venit mediu – cheltuieli luna aceasta
+        let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now
+        let spentThisMonth = snapshot.transactions
+            .filter { $0.isOutgoing && $0.date >= monthStart }
+            .reduce(0) { $0 + $1.amount.amount }
+        let currentBalance = Money(max(0, cashFlow.monthlyIncomeAvg.amount - spentThisMonth))
+        let afterPayment = Money(max(0, currentBalance.amount - obligation.amount.amount))
+
+        let paydayDay = paydayDayOfMonth(snapshot: snapshot)
+        let daysUntilPayday = daysUntilDayOfMonth(paydayDay, from: now)
+        let perDayAfter = daysUntilPayday > 0 ? Money(afterPayment.amount / daysUntilPayday) : Money(0)
+
+        let isTight = afterPayment.amount < 500
+        let isAffordable = currentBalance.amount >= obligation.amount.amount
+        let tone: AssessmentTone = !isAffordable ? .urgent : isTight ? .alert : daysUntil <= 1 ? .calm : .reassuring
+
+        let upcomingItem = UpcomingObligationItem(
+            name: obligation.name,
+            amountEstimated: obligation.amount,
+            dueDate: dueDate,
+            daysUntilDue: daysUntil,
+            amountEstimationConfidence: .high,
+            basedOnHistory: "Obligație fixă lunară"
+        )
+
+        let cashCtx = UpcomingObligationCashContext(
+            currentBalance: currentBalance,
+            afterPayment: afterPayment,
+            daysUntilNextPayday: daysUntilPayday,
+            availablePerDayAfter: perDayAfter
+        )
+
+        let assessment = UpcomingObligationAssessment(isAffordable: isAffordable, isTight: isTight, tone: tone)
+
+        let weekday = cal.component(.weekday, from: dueDate)
+        let isWeekend = weekday == 1 || weekday == 7
+        let weekendAvg = Money(cashFlow.monthlySpendingAvg.amount / 14) // rough 2-day estimate
+        let weekendWarning = WeekendWarning(
+            isWeekendComing: isWeekend,
+            weekendAvgSpend: weekendAvg,
+            wouldCreateProblem: isWeekend && isTight
+        )
+
+        return UpcomingObligationContext(
+            user: buildMomentUser(snapshot: snapshot),
+            upcoming: upcomingItem,
+            context: cashCtx,
+            assessment: assessment,
+            weekendWarning: weekendWarning
+        )
+    }
+
+    // MARK: - Pattern Alert context builder
+
+    private func buildPatternAlertContext(snapshot: Snapshot) -> PatternAlertContext? {
+        guard snapshot.transactions.count >= 10 else { return nil }
+
+        let report = patternDetector.detect(
+            transactions: snapshot.transactions,
+            referenceDate: snapshot.referenceDate
+        )
+
+        // Priority: frequencySpike > weekendSpike > temporalCluster
+        if let spike = report.frequencySpikes.first {
+            let pattern = PatternDetected(
+                category: spike.category,
+                merchantDominant: spike.merchantDominant,
+                type: .frequencySpike,
+                description: spike.description,
+                amountPeriod: spike.amountLast7Days,
+                amountProjectedMonthly: spike.monthlyProjection,
+                vsBudget: spike.monthlyProjection,
+                vsBudgetPct: 0,
+                temporalConcentration: TemporalConcentration(isTemporal: false, pattern: "", interpretation: "")
+            )
+            return PatternAlertContext(
+                user: buildMomentUser(snapshot: snapshot),
+                patternDetected: pattern,
+                scenarios: buildPatternScenarios(for: pattern),
+                toneCalibration: .warmNoJudgment
+            )
+        }
+
+        if report.weekendSpike.isSignificant {
+            let pct = Int((report.weekendSpike.ratio - 1.0) * 100)
+            let pattern = PatternDetected(
+                category: .entertainment,
+                merchantDominant: nil,
+                type: .weekendSpike,
+                description: "Cheltuielile din weekend sunt de \(String(format: "%.1f", report.weekendSpike.ratio))x mai mari decât în zilele de lucru",
+                amountPeriod: Money(report.weekendSpike.weekendAvgPerDay.amount * 8),
+                amountProjectedMonthly: Money(report.weekendSpike.weekendAvgPerDay.amount * 8),
+                vsBudget: report.weekendSpike.weekdayAvgPerDay,
+                vsBudgetPct: pct,
+                temporalConcentration: TemporalConcentration(
+                    isTemporal: true,
+                    pattern: "Weekend (sâmbătă–duminică)",
+                    interpretation: "Cheltuielile se concentrează în weekend"
+                )
+            )
+            return PatternAlertContext(
+                user: buildMomentUser(snapshot: snapshot),
+                patternDetected: pattern,
+                scenarios: buildPatternScenarios(for: pattern),
+                toneCalibration: .curiousReflective
+            )
+        }
+
+        if let cluster = report.temporalClusters.first(where: { $0.isStrong }) {
+            let catSpending = report.topCategories.first(where: { $0.category == cluster.category })
+            let monthlyEstimate = catSpending.map { Money($0.totalAmount.amount / 3) } ?? Money(0)
+            let pattern = PatternDetected(
+                category: cluster.category,
+                merchantDominant: catSpending?.dominantMerchant,
+                type: .temporalClustering,
+                description: cluster.description,
+                amountPeriod: catSpending?.totalAmount ?? Money(0),
+                amountProjectedMonthly: monthlyEstimate,
+                vsBudget: Money(0),
+                vsBudgetPct: 0,
+                temporalConcentration: TemporalConcentration(
+                    isTemporal: true,
+                    pattern: cluster.description,
+                    interpretation: "Pattern temporal consistent în ultimele 3 luni"
+                )
+            )
+            return PatternAlertContext(
+                user: buildMomentUser(snapshot: snapshot),
+                patternDetected: pattern,
+                scenarios: buildPatternScenarios(for: pattern),
+                toneCalibration: .curiousReflective
+            )
+        }
+
+        return nil
+    }
+
+    private func buildPatternScenarios(for pattern: PatternDetected) -> [PatternScenario] {
+        let monthly = pattern.amountProjectedMonthly.amount
+        let saving = max(0, monthly / 4)
+        return [
+            PatternScenario(
+                scenarioId: .continueAsIs,
+                description: "Continuă ca acum",
+                monthEndOutcome: "Cheltuiești ~\(monthly) RON/lună pe \(pattern.category.displayNameRO)",
+                goalImpact: "Impact neutru față de obiectivele actuale"
+            ),
+            PatternScenario(
+                scenarioId: .reduce2PerWeek,
+                description: "Reduce cu 2 vizite pe săptămână",
+                monthEndOutcome: "Economisești ~\(saving) RON/lună",
+                goalImpact: "Progres mai rapid spre obiective"
+            )
+        ]
+    }
+
+    // MARK: - Weekly Summary context builder
+
+    private func buildWeeklySummaryContext(snapshot: Snapshot, cashFlow: CashFlowAnalysis) -> WeeklySummaryContext? {
+        let cal = Calendar.current
+        let now = snapshot.referenceDate
+        let weekday = cal.component(.weekday, from: now) // 1=Sun, 2=Mon
+
+        // Disponibil duminică (1) sau luni (2)
+        guard weekday == 1 || weekday == 2 else { return nil }
+
+        // Săptămâna curentă (luni–duminică)
+        let weekAgo = cal.date(byAdding: .day, value: -7, to: now) ?? now
+        let weekStart = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: weekAgo)) ?? weekAgo
+        let weekEnd = cal.date(byAdding: .day, value: 6, to: weekStart) ?? now
+
+        let weekTxs = snapshot.transactions.filter { $0.isOutgoing && $0.date >= weekStart && $0.date <= weekEnd }
+        let weekTotal = weekTxs.reduce(0) { $0 + $1.amount.amount }
+        let weeklyAvg = cashFlow.monthlySpendingAvg.amount / 4
+        let diff = weekTotal - weeklyAvg
+        let diffPct = weeklyAvg > 0 ? Int(Double(abs(diff)) / Double(weeklyAvg) * 100) : 0
+        let direction: SpendingTrendDirection
+        switch diff {
+        case ..<(-100):  direction = .below
+        case (-100)..<(-20): direction = .slightlyBelow
+        case (-20)...20: direction = .onAverage
+        case 21...100:  direction = .slightlyAbove
+        default:        direction = .above
+        }
+
+        let spending = WeeklySpendingBlock(
+            total: Money(weekTotal),
+            vsWeeklyAvg: Money(weeklyAvg),
+            diffPct: diffPct,
+            direction: direction
+        )
+
+        // Highlights
+        var highlights: [WeeklyHighlight] = []
+        if let biggestTx = weekTxs.max(by: { $0.amount.amount < $1.amount.amount }) {
+            highlights.append(WeeklyHighlight(
+                type: .biggestExpense,
+                category: biggestTx.category,
+                amount: biggestTx.amount,
+                context: "Cea mai mare cheltuială: \(biggestTx.merchant ?? biggestTx.category.displayNameRO)"
+            ))
+        }
+        if direction == .below || direction == .slightlyBelow {
+            highlights.append(WeeklyHighlight(
+                type: .budgetKept,
+                context: "Ai cheltuit cu \(diffPct)% mai puțin decât media săptămânală"
+            ))
+        }
+        let hasNoIFN = !snapshot.obligations.contains { $0.kind == .loanIFN }
+        if hasNoIFN {
+            highlights.append(WeeklyHighlight(
+                type: .noIFNNoBNPLTemptation,
+                context: "Nicio cheltuială IFN sau BNPL detectată"
+            ))
+        }
+
+        // Preview săptămână viitoare
+        let nextWeekStart = cal.date(byAdding: .day, value: 1, to: weekEnd) ?? now
+        let nextWeekEnd = cal.date(byAdding: .day, value: 7, to: nextWeekStart) ?? now
+        let nextWeekObligations: [UpcomingObligationRef] = snapshot.obligations.compactMap { o in
+            var d = DateComponents()
+            d.day = o.dayOfMonth
+            d.month = cal.component(.month, from: nextWeekStart)
+            d.year = cal.component(.year, from: nextWeekStart)
+            guard let dueDate = cal.date(from: d),
+                  dueDate >= nextWeekStart && dueDate <= nextWeekEnd else { return nil }
+            let dayName = RomanianDateFormatter.weekdayName(cal.component(.weekday, from: dueDate))
+            return UpcomingObligationRef(name: o.name, amount: o.amount, day: dayName)
+        }
+
+        let nextWeekPreview = NextWeekPreview(
+            obligationsDue: nextWeekObligations,
+            eventsInCalendar: []
+        )
+
+        // Small win
+        let smallWin: SmallWin
+        if direction == .below {
+            smallWin = SmallWin(exists: true, description: "Ai economisit \(abs(diff)) RON față de media ta săptămânală!")
+        } else if hasNoIFN && weekTotal < weeklyAvg {
+            smallWin = SmallWin(exists: true, description: "Niciun credit scump și cheltuieli sub medie — bine gestionat!")
+        } else {
+            smallWin = SmallWin(exists: false)
+        }
+
+        let weekNumber = cal.component(.weekOfYear, from: weekAgo)
+        let week = WeekRange(start: weekStart, end: weekEnd, weekNumber: weekNumber)
+
+        return WeeklySummaryContext(
+            user: buildMomentUser(snapshot: snapshot),
+            week: week,
+            spending: spending,
+            highlights: highlights,
+            nextWeekPreview: nextWeekPreview,
+            smallWin: smallWin
+        )
+    }
+
+    // MARK: - Payday day helper
+
+    private func paydayDayOfMonth(snapshot: Snapshot) -> Int {
+        guard let p = snapshot.userProfile else { return 28 }
+        switch p.financials.salaryFrequency {
+        case .monthly(let day): return day
+        case .bimonthly(_, let secondDay): return secondDay
+        case .variable: return 28
+        }
+    }
+
+    private func daysUntilDayOfMonth(_ targetDay: Int, from date: Date) -> Int {
+        let cal = Calendar.current
+        let today = cal.component(.day, from: date)
+        if targetDay > today {
+            return targetDay - today
+        } else {
+            let daysInMonth = cal.range(of: .day, in: .month, for: date)?.count ?? 30
+            return daysInMonth - today + targetDay
+        }
     }
 
     // MARK: - Context builders
