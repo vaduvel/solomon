@@ -81,7 +81,15 @@ public struct SpiralDetector: Sendable {
             factors.append(gapFactor)
         }
 
-        let score = min(factors.count, 4)
+        // Score ponderat: IFN și obligations>income sunt semnale critice (2 pts),
+        // celelalte (balance declining, card credit, BNPL stacking) = 1 pt fiecare.
+        let weightedScore = factors.reduce(0) { acc, factor in
+            switch factor.factor {
+            case .ifnActive, .obligationsExceedIncome: return acc + 2
+            default: return acc + 1
+            }
+        }
+        let score = min(weightedScore, 4)
         let severity = Self.severity(forScore: score)
 
         return SpiralReport(

@@ -715,69 +715,160 @@ public final class MomentEngine {
         )
     }
 
-    private func buildWowMomentContext(snapshot: Snapshot) -> WowMomentContext {
-        let cashFlow: CashFlowAnalysis = !snapshot.transactions.isEmpty
-            ? cashFlowAnalyzer.analyze(transactions: snapshot.transactions, referenceDate: snapshot.referenceDate)
-            : CashFlowAnalyzer.empty(windowDays: 180)
+    // MARK: - WowMomentContext — entry point
 
-        // WowIncome
+    private func buildWowMomentContext(snapshot: Snapshot) -> WowMomentContext {
+        let cashFlow: CashFlowAnalysis = snapshot.transactions.isEmpty
+            ? CashFlowAnalyzer.empty(windowDays: 180)
+            : cashFlowAnalyzer.analyze(
+                transactions: snapshot.transactions,
+                referenceDate: snapshot.referenceDate
+            )
+        let history = computeMonthlyBalanceHistory(snapshot: snapshot, cashFlow: cashFlow)
+        let audit = subscriptionAuditor.audit(subscriptions: snapshot.subscriptions)
+        let spiralReport = spiralDetector.detect(
+            transactions: snapshot.transactions,
+            obligations: snapshot.obligations,
+            monthlyIncomeAvg: cashFlow.monthlyIncomeAvg,
+            monthlySpendingAvg: cashFlow.monthlySpendingAvg,
+            monthlyBalanceHistory: history,
+            referenceDate: snapshot.referenceDate
+        )
+        let obligationsRatio = cashFlow.monthlyIncomeAvg.amount > 0
+            ? Double(snapshot.obligations.reduce(0) { $0 + $1.amount.amount }) / Double(cashFlow.monthlyIncomeAvg.amount)
+            : 0
+
+        return WowMomentContext(
+            user: buildMomentUser(snapshot: snapshot),
+            analysisPeriodDays: cashFlow.windowDays,
+            income: wowIncomeBlock(snapshot: snapshot, cashFlow: cashFlow),
+            spending: wowSpendingBlock(snapshot: snapshot, cashFlow: cashFlow, history: history),
+            outliers: wowOutliersBlock(snapshot: snapshot, cashFlow: cashFlow),
+            patterns: wowPatternsBlock(snapshot: snapshot),
+            obligations: wowObligationsBlock(snapshot: snapshot, cashFlow: cashFlow, ratio: obligationsRatio),
+            ghostSubscriptions: wowGhostSubscriptionsBlock(audit: audit),
+            positives: wowPositiveItems(snapshot: snapshot, audit: audit, obligationsRatio: obligationsRatio),
+            goal: wowGoalBlock(snapshot: snapshot),
+            spiralRisk: SpiralBlock(score: spiralReport.score, severity: spiralReport.severity, factors: spiralReport.factors),
+            nextActionSuggested: wowNextAction(audit: audit, spiralReport: spiralReport)
+        )
+    }
+
+    // MARK: - WowMomentContext helpers
+
+    private func wowIncomeBlock(snapshot: Snapshot, cashFlow: CashFlowAnalysis) -> WowIncome {
         let lowest: LowestMonth = cashFlow.monthlyIncomeLowest.map { mp in
             LowestMonth(amount: mp.amount, month: monthName(year: mp.key.year, month: mp.key.month))
         } ?? LowestMonth(amount: cashFlow.monthlyIncomeAvg, month: "necunoscută")
-
-        let income = WowIncome(
+        return WowIncome(
             monthlyAvg: cashFlow.monthlyIncomeAvg,
             stability: incomeStabilityFromTrend(cashFlow.monthlyBalanceTrend),
             lowestMonth: lowest,
             extraIncomeDetected: snapshot.userProfile?.financials.hasSecondaryIncome ?? false,
             extraIncomeAvg: snapshot.userProfile?.financials.secondaryIncomeAvg
         )
+    }
 
-        // cardCreditUsed: obligație de tip bancară (credit card) sau tranzacție cu "credit" în merchant
+    private func wowSpendingBlock(snapshot: Snapshot, cashFlow: CashFlowAnalysis, history: [Money]) -> WowSpending {
         let cardCreditUsed: Bool = {
-            let hasLoanObligation = snapshot.obligations.contains { $0.kind == .loanBank }
+            let hasLoan = snapshot.obligations.contains { $0.kind == .loanBank }
             let hasCreditMerchant = snapshot.transactions.contains { tx in
                 guard let m = tx.merchant?.lowercased() else { return false }
                 return m.contains("credit") || m.contains("card")
             }
-            return hasLoanObligation || hasCreditMerchant
+            return hasLoan || hasCreditMerchant
         }()
-
-        // overdraftUsedCount180d: număr de luni în ultimele 6 în care soldul cumulat a intrat pe negativ
         let overdraftUsedCount180d: Int = {
-            let history = computeMonthlyBalanceHistory(snapshot: snapshot, cashFlow: cashFlow)
-            var runningBalance = 0
+            var running = 0
             var count = 0
             for monthly in history.suffix(6) {
-                runningBalance += monthly.amount
-                if runningBalance < 0 { count += 1 }
+                running += monthly.amount
+                if running < 0 { count += 1 }
             }
             return count
         }()
-
-        let spending = WowSpending(
+        return WowSpending(
             monthlyAvg: cashFlow.monthlySpendingAvg,
             incomeConsumptionRatio: cashFlow.incomeConsumptionRatio,
             monthlyBalanceTrend: cashFlow.monthlyBalanceTrend,
             cardCreditUsed: cardCreditUsed,
             overdraftUsedCount180d: overdraftUsedCount180d
         )
+    }
 
-        let obligationsTotal = snapshot.obligations.reduce(Money(0)) { $0 + $1.amount }
-        let obligationsItems = snapshot.obligations.prefix(8).map { o in
-            ObligationSummaryItem(name: o.name, amount: o.amount, dayOfMonth: o.dayOfMonth)
-        }
-        let obligationsRatio = cashFlow.monthlyIncomeAvg.amount > 0
-            ? Double(obligationsTotal.amount) / Double(cashFlow.monthlyIncomeAvg.amount)
-            : 0
-        let obligationsBlock = ObligationsBlock(
-            monthlyTotalFixed: obligationsTotal,
-            items: Array(obligationsItems),
-            obligationsToIncomeRatio: obligationsRatio
+    private func wowOutliersBlock(snapshot: Snapshot, cashFlow: CashFlowAnalysis) -> [OutlierItem] {
+        let cal = Calendar.current
+        let cutoff = cal.date(byAdding: .day, value: -180, to: snapshot.referenceDate) ?? snapshot.referenceDate
+        let threshold = cashFlow.monthlySpendingAvg.amount > 0 ? cashFlow.monthlySpendingAvg.amount / 3 : 500
+        return snapshot.transactions
+            .filter { $0.isOutgoing && $0.date >= cutoff && $0.amount.amount >= threshold }
+            .sorted { $0.amount.amount > $1.amount.amount }
+            .prefix(3)
+            .enumerated()
+            .map { idx, tx in
+                OutlierItem(
+                    rank: idx + 1,
+                    type: .singleLargePurchase,
+                    category: tx.category,
+                    merchant: tx.merchant,
+                    amount: tx.amount,
+                    date: tx.date,
+                    contextPhrase: "\(tx.merchant ?? tx.category.displayNameRO) — \(tx.amount.amount) RON",
+                    contextComparison: ""
+                )
+            }
+    }
+
+    private func wowPatternsBlock(snapshot: Snapshot) -> [PatternItem] {
+        guard snapshot.transactions.count >= 10 else { return [] }
+        let report = patternDetector.detect(
+            transactions: snapshot.transactions,
+            referenceDate: snapshot.referenceDate
         )
+        var items: [PatternItem] = []
+        if report.weekendSpike.isSignificant {
+            items.append(PatternItem(
+                type: .weekendSpike,
+                description: "Cheltuielile din weekend sunt de \(String(format: "%.1f", report.weekendSpike.ratio))x mai mari",
+                interpretation: "Posibil stil de viață weekend intensiv",
+                averageWeekendSpend: report.weekendSpike.weekendAvgPerDay,
+                averageWeekdaySpend: report.weekendSpike.weekdayAvgPerDay,
+                ratio: report.weekendSpike.ratio
+            ))
+        }
+        for spike in report.frequencySpikes.prefix(2) {
+            items.append(PatternItem(
+                type: .frequencySpike,
+                category: spike.category,
+                description: spike.description,
+                interpretation: "Frecvență crescută față de media personală"
+            ))
+        }
+        if let cluster = report.temporalClusters.first(where: { $0.isStrong }) {
+            items.append(PatternItem(
+                type: .temporalClustering,
+                category: cluster.category,
+                description: cluster.description,
+                interpretation: "Pattern temporal repetat în ultimele 3 luni"
+            ))
+        }
+        return items
+    }
 
-        let audit = subscriptionAuditor.audit(subscriptions: snapshot.subscriptions)
-        let ghostsBlock = GhostSubscriptionsBlock(
+    private func wowObligationsBlock(snapshot: Snapshot, cashFlow: CashFlowAnalysis, ratio: Double) -> ObligationsBlock {
+        let total = snapshot.obligations.reduce(Money(0)) { $0 + $1.amount }
+        let items = snapshot.obligations.prefix(8).map {
+            ObligationSummaryItem(name: $0.name, amount: $0.amount, dayOfMonth: $0.dayOfMonth)
+        }
+        return ObligationsBlock(
+            monthlyTotalFixed: total,
+            items: Array(items),
+            obligationsToIncomeRatio: ratio
+        )
+    }
+
+    private func wowGhostSubscriptionsBlock(audit: SubscriptionAuditReport) -> GhostSubscriptionsBlock {
+        GhostSubscriptionsBlock(
             count: audit.ghostCount,
             monthlyTotal: audit.monthlyRecoverable,
             annualTotal: audit.annualRecoverable,
@@ -790,137 +881,55 @@ public final class MomentEngine {
                 )
             }
         )
+    }
 
+    private func wowPositiveItems(snapshot: Snapshot, audit: SubscriptionAuditReport, obligationsRatio: Double) -> [PositiveItem] {
         var positives: [PositiveItem] = []
         if !snapshot.obligations.contains(where: { $0.kind == .loanIFN }) {
             positives.append(PositiveItem(type: .noIFN, description: "Niciun credit IFN activ"))
         }
-        if obligationsRatio < 0.3 && obligationsRatio > 0 {
+        if obligationsRatio > 0 && obligationsRatio < 0.3 {
             positives.append(PositiveItem(type: .rentToIncomeHealthy, description: "Obligațiile sunt sub 30% din venit"))
         }
         if audit.monthlyKeptTotal.amount < 200 {
             positives.append(PositiveItem(type: .lowSubscriptions, description: "Abonamente sub 200 RON/lună"))
         }
+        return positives
+    }
 
-        let firstGoal = snapshot.goals.first
-        let goalBlock = GoalBlock(
-            declared: firstGoal != nil,
-            type: firstGoal?.kind,
-            destination: firstGoal?.destination,
-            amountTarget: firstGoal?.amountTarget,
-            amountSaved: firstGoal?.amountSaved
+    private func wowGoalBlock(snapshot: Snapshot) -> GoalBlock {
+        let goal = snapshot.goals.first
+        return GoalBlock(
+            declared: goal != nil,
+            type: goal?.kind,
+            destination: goal?.destination,
+            amountTarget: goal?.amountTarget,
+            amountSaved: goal?.amountSaved
         )
+    }
 
-        let history = computeMonthlyBalanceHistory(snapshot: snapshot, cashFlow: cashFlow)
-        let spiralReport = spiralDetector.detect(
-            transactions: snapshot.transactions,
-            obligations: snapshot.obligations,
-            monthlyIncomeAvg: cashFlow.monthlyIncomeAvg,
-            monthlySpendingAvg: cashFlow.monthlySpendingAvg,
-            monthlyBalanceHistory: history,
-            referenceDate: snapshot.referenceDate
-        )
-        let spiralBlock = SpiralBlock(
-            score: spiralReport.score,
-            severity: spiralReport.severity,
-            factors: spiralReport.factors
-        )
-
-        let nextAction: NextActionSuggestion
+    private func wowNextAction(audit: SubscriptionAuditReport, spiralReport: SpiralReport) -> NextActionSuggestion {
         if audit.ghostCount > 0 {
-            nextAction = NextActionSuggestion(
+            return NextActionSuggestion(
                 type: .cancelGhostSubscriptions,
                 rationale: "Anulând cele \(audit.ghostCount) abonamente fantomă recuperezi \(audit.monthlyRecoverable.amount) RON/lună",
                 monthlySaving: audit.monthlyRecoverable,
                 annualSaving: audit.annualRecoverable
             )
-        } else if spiralReport.severity >= .high {
-            nextAction = NextActionSuggestion(
+        }
+        if spiralReport.severity >= .high {
+            return NextActionSuggestion(
                 type: .talkToCSALB,
-                rationale: "Severitate spiral ridicată — CSALB poate media gratuit",
-                monthlySaving: nil,
-                annualSaving: nil
-            )
-        } else {
-            nextAction = NextActionSuggestion(
-                type: .noActionNeeded,
-                rationale: "Totul arată bine pentru momentul curent",
+                rationale: "Severitate spirală ridicată — CSALB poate media gratuit",
                 monthlySaving: nil,
                 annualSaving: nil
             )
         }
-
-        // Outliers: top 3 cheltuieli mari unice (> medie lunară / 3) în ultimele 180 zile
-        let outliers: [OutlierItem] = {
-            let cal = Calendar.current
-            let cutoff = cal.date(byAdding: .day, value: -180, to: snapshot.referenceDate) ?? snapshot.referenceDate
-            let avgMonthly = cashFlow.monthlySpendingAvg.amount
-            let threshold = avgMonthly > 0 ? avgMonthly / 3 : 500
-            return snapshot.transactions
-                .filter { $0.isOutgoing && $0.date >= cutoff && $0.amount.amount >= threshold }
-                .sorted { $0.amount.amount > $1.amount.amount }
-                .prefix(3)
-                .enumerated()
-                .map { (idx, tx) in
-                    OutlierItem(
-                        rank: idx + 1,
-                        type: .singleLargePurchase,
-                        category: tx.category,
-                        merchant: tx.merchant,
-                        amount: tx.amount,
-                        date: tx.date,
-                        contextPhrase: "\(tx.merchant ?? tx.category.displayNameRO) — \(tx.amount.amount) RON",
-                        contextComparison: ""
-                    )
-                }
-        }()
-
-        // Patterns: convertim din PatternDetector report
-        let patternReport = patternDetector.detect(
-            transactions: snapshot.transactions,
-            referenceDate: snapshot.referenceDate
-        )
-        var wowPatterns: [PatternItem] = []
-        if patternReport.weekendSpike.isSignificant {
-            wowPatterns.append(PatternItem(
-                type: .weekendSpike,
-                description: "Cheltuielile din weekend sunt de \(String(format: "%.1f", patternReport.weekendSpike.ratio))x mai mari decât în zilele de lucru",
-                interpretation: "Posibil stil de viață weekend intensiv",
-                averageWeekendSpend: patternReport.weekendSpike.weekendAvgPerDay,
-                averageWeekdaySpend: patternReport.weekendSpike.weekdayAvgPerDay,
-                ratio: patternReport.weekendSpike.ratio
-            ))
-        }
-        for spike in patternReport.frequencySpikes.prefix(2) {
-            wowPatterns.append(PatternItem(
-                type: .frequencySpike,
-                category: spike.category,
-                description: spike.description,
-                interpretation: "Frecvență crescută față de media personală"
-            ))
-        }
-        if let cluster = patternReport.temporalClusters.first(where: { $0.isStrong }) {
-            wowPatterns.append(PatternItem(
-                type: .temporalClustering,
-                category: cluster.category,
-                description: cluster.description,
-                interpretation: "Pattern temporal repetat în ultimele 3 luni"
-            ))
-        }
-
-        return WowMomentContext(
-            user: buildMomentUser(snapshot: snapshot),
-            analysisPeriodDays: cashFlow.windowDays,
-            income: income,
-            spending: spending,
-            outliers: Array(outliers),
-            patterns: wowPatterns,
-            obligations: obligationsBlock,
-            ghostSubscriptions: ghostsBlock,
-            positives: positives,
-            goal: goalBlock,
-            spiralRisk: spiralBlock,
-            nextActionSuggested: nextAction
+        return NextActionSuggestion(
+            type: .noActionNeeded,
+            rationale: "Totul arată bine pentru momentul curent",
+            monthlySaving: nil,
+            annualSaving: nil
         )
     }
 

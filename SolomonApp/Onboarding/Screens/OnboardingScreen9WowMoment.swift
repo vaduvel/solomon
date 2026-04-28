@@ -15,8 +15,7 @@ struct OnboardingScreen9WowMoment: View {
 
     @State private var llmResponse: String?
     @State private var isGenerating: Bool = true
-
-    private let engine = MomentEngine()
+    // Engine e creat în generateMoment() cu provider-ul real injectat
 
     var body: some View {
         ScrollView {
@@ -91,16 +90,15 @@ struct OnboardingScreen9WowMoment: View {
                     .solAIInsightCard()
                 }
 
-                // Insights placeholder
-                VStack(spacing: SolSpacing.sm) {
-                    insightRow(icon: "exclamationmark.triangle.fill",
-                               iconColor: .solWarning,
-                               title: "Abonamente fantomă",
-                               body: "2 abonamente nefolosite — 78 RON/lună.")
-                    insightRow(icon: "checkmark.shield.fill",
-                               iconColor: .solPrimary,
-                               title: "Zero IFN, zero BNPL",
-                               body: "Nu ai datorii toxice. Bravo!")
+                // Insights dinamice derivate din datele introduse în onboarding
+                if !dynamicInsights.isEmpty {
+                    VStack(spacing: SolSpacing.sm) {
+                        ForEach(dynamicInsights.indices, id: \.self) { idx in
+                            let item = dynamicInsights[idx]
+                            insightRow(icon: item.icon, iconColor: item.color,
+                                       title: item.title, body: item.body)
+                        }
+                    }
                 }
             }
             .padding(.horizontal, SolSpacing.lg)
@@ -190,12 +188,72 @@ struct OnboardingScreen9WowMoment: View {
             goals: []
         )
 
+        // Injectăm provider-ul real (MLX dacă e descărcat, Template fallback)
+        let engine = MomentEngine(llm: ModelDownloadService.shared.makeLLMProvider())
         do {
             let output = try await engine.generateWowMoment(snapshot: snapshot)
             llmResponse = output.llmResponse
         } catch {
             llmResponse = nil
         }
+    }
+
+    // MARK: - Dynamic insights derivate din datele onboarding
+
+    private struct InsightItem {
+        let icon: String
+        let color: Color
+        let title: String
+        let body: String
+    }
+
+    private var dynamicInsights: [InsightItem] {
+        var items: [InsightItem] = []
+        let salary = state.salaryRange?.midpointRON ?? 5000
+
+        // 1. IFN / BNPL check
+        let hasIFN = state.draftObligations.contains { $0.kind == .loanIFN || $0.kind == .bnpl }
+        if hasIFN {
+            let ifnTotal = state.draftObligations
+                .filter { $0.kind == .loanIFN || $0.kind == .bnpl }
+                .reduce(0) { $0 + $1.amountRON }
+            items.append(InsightItem(
+                icon: "exclamationmark.triangle.fill",
+                color: .solWarning,
+                title: "IFN / BNPL activ",
+                body: "\(ifnTotal) RON/lună în credite scumpe — Solomon monitorizează."
+            ))
+        } else {
+            items.append(InsightItem(
+                icon: "checkmark.shield.fill",
+                color: .solPrimary,
+                title: "Zero IFN, zero BNPL",
+                body: "Nu ai datorii toxice. Excelent punct de plecare!"
+            ))
+        }
+
+        // 2. Rata obligații / venit
+        let totalObligations = state.draftObligations.reduce(0) { $0 + $1.amountRON }
+        if totalObligations > 0 && salary > 0 {
+            let ratio = Int(Double(totalObligations) / Double(salary) * 100)
+            if ratio > 50 {
+                items.append(InsightItem(
+                    icon: "exclamationmark.circle.fill",
+                    color: .solWarning,
+                    title: "Obligații ridicate",
+                    body: "\(ratio)% din venit pe obligații fixe. Solomon va alerta dacă cresc."
+                ))
+            } else {
+                items.append(InsightItem(
+                    icon: "checkmark.circle.fill",
+                    color: .solPrimary,
+                    title: "Obligații sub control",
+                    body: "\(ratio)% din venit — în parametri sănătoși."
+                ))
+            }
+        }
+
+        return items
     }
 
     // MARK: - Mock cifre din state

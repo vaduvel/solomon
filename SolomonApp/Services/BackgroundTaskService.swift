@@ -40,9 +40,14 @@ final class BackgroundTaskService {
             forTaskWithIdentifier: Self.taskIdRefresh,
             using: nil
         ) { task in
-            // BGTask nu e Sendable în Swift 6 — nonisolated(unsafe) e escape hatch aprobat
-            nonisolated(unsafe) let t = task as! BGAppRefreshTask
+            // BGTask nu e Sendable în Swift 6 — nonisolated(unsafe) e escape hatch aprobat.
+            // Folosim as? + guard în loc de force-cast pentru crash safety.
+            nonisolated(unsafe) let rawTask = task
             Task { @MainActor in
+                guard let t = rawTask as? BGAppRefreshTask else {
+                    rawTask.setTaskCompleted(success: false)
+                    return
+                }
                 await BackgroundTaskService.shared.handleRefresh(task: t)
             }
         }
@@ -51,8 +56,12 @@ final class BackgroundTaskService {
             forTaskWithIdentifier: Self.taskIdWeekly,
             using: nil
         ) { task in
-            nonisolated(unsafe) let t = task as! BGProcessingTask
+            nonisolated(unsafe) let rawTask = task
             Task { @MainActor in
+                guard let t = rawTask as? BGProcessingTask else {
+                    rawTask.setTaskCompleted(success: false)
+                    return
+                }
                 await BackgroundTaskService.shared.handleWeekly(task: t)
             }
         }

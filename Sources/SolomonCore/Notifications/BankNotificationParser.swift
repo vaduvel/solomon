@@ -16,16 +16,47 @@ import Foundation
 
 public enum BankNotificationParser {
 
+    // MARK: - Decimal format hint
+
+    /// Sugerează formatul zecimal al sumei din notificare.
+    ///
+    /// - `auto`: heuristic bazat pe ultimul separator (comportament default)
+    /// - `european`: punct = mii, virgulă = zecimale (BT, BCR, Raiffeisen, ING RO, CEC)
+    /// - `us`:      virgulă = mii, punct = zecimale (Revolut UK/US locale)
+    public enum DecimalFormatHint: Sendable {
+        case auto
+        case european
+        case us
+
+        /// Inferă formatul din banca primară a userului.
+        public static func from(bank: Bank) -> DecimalFormatHint {
+            switch bank {
+            case .revolut: return .us   // Revolut afișează US format în notificări
+            default: return .european   // Toate băncile RO: punct=mii, virgulă=zecimal
+            }
+        }
+    }
+
     // MARK: - Public API
 
     /// Parseaza textul brut al unei notificări bancare.
+    ///
+    /// - Parameters:
+    ///   - raw: Textul notificării push.
+    ///   - date: Data tranzacției (default: acum).
+    ///   - decimalHint: Formatul zecimal așteptat (default `.auto` — heuristic).
+    ///                  Trimite `.european` pentru băncile RO clasice sau `.us` pentru Revolut.
     /// - Returns: `Transaction` gata de stocat, sau `nil` dacă textul nu e recunoscut.
-    public static func parse(raw: String, date: Date = Date()) -> Transaction? {
+    public static func parse(
+        raw: String,
+        date: Date = Date(),
+        decimalHint: DecimalFormatHint = .auto
+    ) -> Transaction? {
         let normalized = raw
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "\u{00A0}", with: " ") // non-breaking space
 
-        guard let extracted = extractAmountAndMerchant(from: normalized) else { return nil }
+        guard let extracted = extractAmountAndMerchant(from: normalized, decimalHint: decimalHint) else { return nil }
 
         // IFN check first — dacă merchant matches IFN registry, override la loansIFN
         let merchantClean = extracted.merchant ?? ""
@@ -99,7 +130,10 @@ public enum BankNotificationParser {
 
     // MARK: - Amount + Merchant Extraction
 
-    static func extractAmountAndMerchant(from text: String) -> Extracted? {
+    static func extractAmountAndMerchant(
+        from text: String,
+        decimalHint: DecimalFormatHint = .auto
+    ) -> Extracted? {
         let range = NSRange(text.startIndex..., in: text)
         guard let match = amountPattern.firstMatch(in: text, range: range) else { return nil }
 
@@ -111,7 +145,7 @@ public enum BankNotificationParser {
         let amountStr = String(text[amountRange])
         let currency = String(text[currencyRange]).uppercased()
 
-        guard let amount = parseDecimal(amountStr) else { return nil }
+        guard let amount = parseDecimal(amountStr, hint: decimalHint) else { return nil }
 
         // Extrage merchantul din textul de după suma+valuta
         let afterMatch: String
@@ -212,13 +246,25 @@ public enum BankNotificationParser {
 
     /// Convertește `"65,00"`, `"65.00"`, `"1.234,56"`, `"1,234.56"` → Decimal
     ///
-    /// Strategie: ultimul separator determină formatul.
-    /// - Ultimul separator e `,` → format european (`.` = mii, `,` = zecimal)
-    /// - Ultimul separator e `.` → format standard (`,` = mii, `.` = zecimal)
-    static func parseDecimal(_ s: String) -> Decimal? {
+    /// - Parameter hint: `.european` forțează virgula=decimal; `.us` forțează punct=decimal;
+    ///                   `.auto` folosește heuristic bazat pe ultimul separator.
+    static func parseDecimal(_ s: String, hint: DecimalFormatHint = .auto) -> Decimal? {
         let cleaned = s.trimmingCharacters(in: .whitespaces)
 
-        // Găsim ultimul separator (virgulă sau punct)
+        // Hint explicit — rezolvă ambiguitatea "1.234" / "1,234"
+        if hint == .european {
+            let normalized = cleaned
+                .replacingOccurrences(of: ".", with: "")   // punct = mii separator
+                .replacingOccurrences(of: ",", with: ".")  // virgulă = zecimal
+            return Decimal(string: normalized)
+        }
+        if hint == .us {
+            let normalized = cleaned
+                .replacingOccurrences(of: ",", with: "")  // virgulă = mii separator
+            return Decimal(string: normalized)
+        }
+
+        // .auto — heuristic bazat pe ultimul separator (comportament vechi)
         let lastComma = cleaned.lastIndex(of: ",")
         let lastDot   = cleaned.lastIndex(of: ".")
 
@@ -230,25 +276,21 @@ public enum BankNotificationParser {
             normalized = cleaned
 
         case (_?, nil):
-            // "65,00" sau "1.234" cu virgulă la final
-            // Singura virgulă → separator zecimal
+            // "65,00" sau "1.234" cu virgulă finală → separator zecimal
             normalized = cleaned.replacingOccurrences(of: ",", with: ".")
 
         case (nil, _?):
-            // "65.00" — deja în format standard
-            // Dar "1,234" (fără punct) nu ajunge aici
+            // "65.00" — format standard
             normalized = cleaned
 
         case (let c?, let d?) where c > d:
             // Ultima e virgulă → European: "1.234,56"
-            // Scoatem punctele (mii), înlocuim virgula cu punct
             normalized = cleaned
                 .replacingOccurrences(of: ".", with: "")
                 .replacingOccurrences(of: ",", with: ".")
 
         case (_?, _?):
             // Ultimul e punct → American: "1,234.56"
-            // Scoatem virgulele (mii)
             normalized = cleaned.replacingOccurrences(of: ",", with: "")
         }
 

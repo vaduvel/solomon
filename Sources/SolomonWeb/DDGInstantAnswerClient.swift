@@ -30,12 +30,25 @@ public enum DDGClientError: Error, Sendable {
 /// URL: `https://api.duckduckgo.com/?q=<query>&format=json&no_html=1&skip_disambig=1&kl=ro-ro`
 ///
 /// Spec §3.1: maxim ~5.000 queries/lună la 10k useri — cost neglijabil.
+///
+/// Timeout default: 8 secunde — DDG e supplemental (nu critic path). Dacă eșuează,
+/// UI-ul merge înainte fără răspuns web; nu blochează momentele LLM.
 public struct DDGInstantAnswerClient: Sendable {
 
     private let http: HTTPClient
 
-    public init(http: HTTPClient = URLSession.shared) {
-        self.http = http
+    /// - Parameters:
+    ///   - http: Client HTTP injectat (default: sesiune ephemeralâ cu timeout configurabil).
+    ///   - timeoutSeconds: Timeout per request și per resursă. Default 8s.
+    public init(http: HTTPClient? = nil, timeoutSeconds: Double = 8) {
+        if let http {
+            self.http = http
+        } else {
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest  = timeoutSeconds
+            config.timeoutIntervalForResource = timeoutSeconds
+            self.http = URLSession(configuration: config)
+        }
     }
 
     // MARK: - Fetch

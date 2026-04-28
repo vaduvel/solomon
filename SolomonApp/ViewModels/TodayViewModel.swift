@@ -69,8 +69,13 @@ final class TodayViewModel: ObservableObject {
         greetingText = greetingForCurrentHour()
         hasUnreadAlert = false
 
-        await refreshBudget(profile: profile)
-        await refreshMoment(profile: profile)
+        // Lansăm budget și moment concurent:
+        // refreshBudget e rapid (CoreData sync), refreshMoment suspendă pe LLM inference.
+        // Cu async let, bugetul apare în UI fără să aștepte inferența LLM.
+        async let budget: Void = refreshBudget(profile: profile)
+        async let moment: Void = refreshMoment(profile: profile)
+        await budget
+        await moment
     }
 
     // MARK: - Budget calculation

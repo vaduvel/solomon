@@ -51,7 +51,9 @@ public struct CashFlowAnalyzer: Sendable {
             ? Double(monthlySpendingAvg.amount) / Double(monthlyIncomeAvg.amount)
             : 0
 
-        let velocityRONPerDay = Money(monthlySpendingAvg.amount / 30)
+        // Velocitate reală: total cheltuieli din fereastră ÷ zile reale (nu /30 hardcodat)
+        let totalSpendingInWindow = spendingAmounts.reduce(0) { $0 + $1.amount }
+        let velocityRONPerDay = windowDays > 0 ? Money(totalSpendingInWindow / windowDays) : Money(0)
         let breakEvenStatus = Self.classifyBreakEven(income: monthlyIncomeAvg, spending: monthlySpendingAvg)
         let monthlyBalanceTrend = Self.classifyBalanceTrend(buckets: monthlyBuckets)
 
