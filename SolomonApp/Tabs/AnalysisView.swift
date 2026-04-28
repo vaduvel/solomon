@@ -28,7 +28,7 @@ struct AnalysisView: View {
 
                     Spacer(minLength: SolSpacing.xxxl)
                 }
-                .padding(.top, SolSpacing.sm)
+                .padding(.top, SolSpacing.base)
             }
             .background(Color.solCanvas)
             .navigationTitle("Analiză")
