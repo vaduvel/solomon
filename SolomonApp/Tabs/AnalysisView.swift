@@ -14,26 +14,23 @@ struct AnalysisView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.solCanvas.ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: SolSpacing.xl) {
 
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: SolSpacing.sectionGap) {
+                    // KPI summary card
+                    monthSummaryCard
 
-                        // Sumar lună curentă
-                        monthSummaryCard
+                    // Categorii top
+                    categoryBreakdown
 
-                        // Breakdown categorii
-                        categoryBreakdown
+                    // Trend 3 luni
+                    trendSection
 
-                        // Trend 3 luni
-                        trendSection
-
-                        Spacer(minLength: SolSpacing.hh)
-                    }
-                    .padding(.top, SolSpacing.xl)
+                    Spacer(minLength: SolSpacing.xxxl)
                 }
+                .padding(.top, SolSpacing.sm)
             }
+            .background(Color.solCanvas)
             .navigationTitle("Analiză")
             .navigationBarTitleDisplayMode(.large)
         }
@@ -48,142 +45,148 @@ struct AnalysisView: View {
     @ViewBuilder
     private var monthSummaryCard: some View {
         VStack(spacing: SolSpacing.base) {
-            HStack {
+            HStack(spacing: 0) {
                 summaryKPI(
                     label: "Cheltuieli \(vm.currentMonthLabel.lowercased())",
                     value: vm.currentMonthSpentRON > 0 ? "\(vm.currentMonthSpentRON) RON" : "—",
-                    color: .solTextPrimary
+                    color: Color.solForeground
                 )
-                Divider().frame(height: 40).background(Color.solBorder)
+                Divider().frame(height: 40)
                 summaryKPI(
                     label: "vs. luna trecută",
                     value: vm.deltaPercentText,
                     color: vm.deltaIsWarning ? .solWarning : .solPrimary
                 )
-                Divider().frame(height: 40).background(Color.solBorder)
-                summaryKPI(label: "Diferență", value: vm.savingsText, color: vm.savingsText.hasPrefix("+") ? .solPrimary : .solMuted)
+                Divider().frame(height: 40)
+                summaryKPI(
+                    label: "Diferență",
+                    value: vm.savingsText,
+                    color: vm.savingsText.hasPrefix("+") ? .solPrimary : .secondary
+                )
             }
         }
         .padding(SolSpacing.cardStandard)
         .solCard()
-        .padding(.horizontal, SolSpacing.screenHorizontal)
+        .padding(.horizontal, SolSpacing.lg)
     }
 
     @ViewBuilder
     private func summaryKPI(label: String, value: String, color: Color) -> some View {
         VStack(spacing: SolSpacing.xs) {
             Text(value)
-                .font(.solHeadingMD)
+                .font(.title3.weight(.semibold))
                 .foregroundStyle(color)
                 .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Text(label)
-                .font(.solCaption)
-                .foregroundStyle(Color.solTextMuted)
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
+        .padding(.horizontal, SolSpacing.xs)
     }
 
     @ViewBuilder
     private var categoryBreakdown: some View {
-        VStack(spacing: SolSpacing.base) {
-            sectionHeader("Top categorii")
+        VStack(alignment: .leading, spacing: SolSpacing.sm) {
+            Text("Top categorii")
+                .solSectionHeader()
+                .padding(.horizontal, SolSpacing.lg)
 
-            VStack(spacing: SolSpacing.sm) {
-                ForEach(vm.categories) { cat in
-                    categoryRow(cat)
+            if vm.categories.isEmpty {
+                EmptyStateView(
+                    icon: "chart.pie",
+                    title: "Nicio cheltuială",
+                    subtitle: "Adaugă tranzacții ca Solomon să vadă pattern-uri."
+                )
+                .solCard()
+                .padding(.horizontal, SolSpacing.lg)
+            } else {
+                VStack(spacing: SolSpacing.sm) {
+                    ForEach(vm.categories) { cat in
+                        categoryRow(cat)
+                    }
                 }
+                .padding(.horizontal, SolSpacing.lg)
             }
-            .padding(.horizontal, SolSpacing.screenHorizontal)
         }
     }
 
     @ViewBuilder
     private func categoryRow(_ cat: CategoryBreakdown) -> some View {
         HStack(spacing: SolSpacing.md) {
-            ZStack {
-                Circle()
-                    .fill(cat.color.opacity(0.15))
-                    .frame(width: 36, height: 36)
-                Image(systemName: cat.iconName)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(cat.color)
-            }
+            Image(systemName: cat.iconName)
+                .font(.title3)
+                .foregroundStyle(cat.color)
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 32)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(cat.name)
-                    .font(.solBodyMD)
-                    .foregroundStyle(Color.solTextPrimary)
-
-                // Progress bar
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.solSurface)
-                            .frame(height: 4)
-                        Capsule()
-                            .fill(cat.color)
-                            .frame(width: geo.size.width * cat.fraction, height: 4)
-                    }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(cat.name)
+                        .font(.body)
+                        .foregroundStyle(Color.solForeground)
+                    Spacer()
+                    Text(cat.amountFormatted)
+                        .font(.solMono)
+                        .foregroundStyle(Color.solForeground)
                 }
-                .frame(height: 4)
-            }
 
-            Text(cat.amountFormatted)
-                .font(.solMonoSM)
-                .foregroundStyle(Color.solTextPrimary)
-                .monospacedDigit()
+                NeonProgressBar(
+                    progress: cat.fraction,
+                    variant: .info,
+                    height: 3
+                )
+            }
         }
-        .padding(SolSpacing.md)
+        .padding(SolSpacing.base)
         .solCard()
     }
 
     @ViewBuilder
     private var trendSection: some View {
-        VStack(spacing: SolSpacing.base) {
-            sectionHeader("Tendință 3 luni")
+        VStack(alignment: .leading, spacing: SolSpacing.sm) {
+            Text("Tendință 3 luni")
+                .solSectionHeader()
+                .padding(.horizontal, SolSpacing.lg)
 
-            HStack(alignment: .bottom, spacing: SolSpacing.sm) {
+            HStack(alignment: .bottom, spacing: SolSpacing.md) {
                 ForEach(vm.monthlyTrend) { month in
                     trendBar(month)
                 }
             }
-            .frame(height: 120)
-            .padding(SolSpacing.xl)
+            .frame(height: 140)
+            .padding(SolSpacing.lg)
             .solCard()
-            .padding(.horizontal, SolSpacing.screenHorizontal)
+            .padding(.horizontal, SolSpacing.lg)
         }
     }
 
     @ViewBuilder
     private func trendBar(_ month: MonthTrend) -> some View {
         VStack(spacing: SolSpacing.xs) {
+            Text("\(Int(month.amount))")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(month.isCurrentMonth ? Color.solPrimary : .secondary)
             Spacer()
             RoundedRectangle(cornerRadius: SolRadius.sm, style: .continuous)
-                .fill(month.isCurrentMonth ? Color.solMint : Color.solSurface)
-                .frame(width: 40, height: month.barHeight)
+                .fill(month.isCurrentMonth ? AnyShapeStyle(LinearGradient.solHero) : AnyShapeStyle(Color.solCard))
+                .frame(maxWidth: 48)
+                .frame(height: month.barHeight)
                 .overlay(
                     RoundedRectangle(cornerRadius: SolRadius.sm, style: .continuous)
                         .stroke(month.isCurrentMonth ? Color.clear : Color.solBorder, lineWidth: 1)
                 )
             Text(month.label)
-                .font(.solCaption)
-                .foregroundStyle(month.isCurrentMonth ? Color.solMint : Color.solTextMuted)
+                .font(.footnote)
+                .foregroundStyle(month.isCurrentMonth ? Color.solPrimary : .secondary)
         }
         .frame(maxWidth: .infinity)
     }
 
-    private func sectionHeader(_ title: String) -> some View {
-        HStack {
-            Text(title)
-                .font(.solCaption)
-                .foregroundStyle(Color.solTextMuted)
-                .textCase(.uppercase)
-                .tracking(1.2)
-            Spacer()
-        }
-        .padding(.horizontal, SolSpacing.screenHorizontal)
-    }
 }
 
 // MARK: - Supporting models

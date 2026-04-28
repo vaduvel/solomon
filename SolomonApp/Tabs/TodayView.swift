@@ -2,75 +2,84 @@ import SwiftUI
 import SolomonCore
 import SolomonStorage
 
-// MARK: - TodayView (Tab 1 — Azi)
+// MARK: - TodayView (Tab 1 — HIG aligned)
 //
-// Ecranul principal Solomon. Afișează:
-//  • Salut personalizat + balanță Safe-to-Spend
-//  • Momentul Solomon curent (MomentCard)
-//  • Buton „Pot să-mi permit?" — acces rapid la CanIAfford
-//  • Feed scurt de momente recente
+// Pattern HIG: NavigationStack cu .large title display, ScrollView cu hero +
+// glass card + insights, toolbar cu manual entry + notifications.
 
 struct TodayView: View {
 
-    // MARK: - View Model
-
     @StateObject private var vm = TodayViewModel()
-
-    // MARK: - Notification ingestion (live transactions from Shortcuts)
-
     @ObservedObject private var ingestion = NotificationIngestionService.shared
     @State private var showManualEntry = false
-
-    // MARK: - Body
+    @State private var showCanIAfford = false
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .top) {
-                Color.solCanvas.ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: SolSpacing.xl) {
 
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: SolSpacing.sectionGap) {
+                    // Greeting
+                    greetingHeader
 
-                        // Hero — Safe to Spend
-                        heroSection
+                    // Hero — Safe to Spend
+                    heroCard
 
-                        // Moment curent Solomon
-                        if let moment = vm.currentMoment {
-                            sectionHeader("Solomon spune")
+                    // Quick action — Pot?
+                    canIAffordCTA
+
+                    // Current moment (Solomon AI insight)
+                    if let moment = vm.currentMoment {
+                        VStack(alignment: .leading, spacing: SolSpacing.sm) {
+                            Text("Solomon spune")
+                                .solSectionHeader()
+                                .padding(.horizontal, SolSpacing.lg)
+
                             MomentCard(moment: moment)
-                                .padding(.horizontal, SolSpacing.screenHorizontal)
+                                .padding(.horizontal, SolSpacing.lg)
                         }
-
-                        // Acțiune rapidă — Pot?
-                        canIAffordQuickAction
-
-                        // Momente recente
-                        if !vm.recentMoments.isEmpty {
-                            sectionHeader("Recent")
-                            recentMomentsList
-                        }
-
-                        // Bottom spacer pentru tab bar
-                        Spacer(minLength: SolSpacing.hh)
                     }
-                    .padding(.top, SolSpacing.xl)
+
+                    Spacer(minLength: SolSpacing.xxxl)
                 }
+                .padding(.top, SolSpacing.sm)
             }
+            .background(Color.solCanvas)
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    addManualButton
+                    Button {
+                        Haptics.light()
+                        showManualEntry = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(Color.solForeground)
+                    }
                 }
                 ToolbarItem(placement: .principal) {
-                    solomonWordmark
+                    Text("Solomon")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(Color.solForeground)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    notificationButton
+                    Button {
+                        Haptics.light()
+                    } label: {
+                        Image(systemName: vm.hasUnreadAlert ? "bell.badge.fill" : "bell")
+                            .font(.body)
+                            .foregroundStyle(vm.hasUnreadAlert ? Color.solPrimary : Color.solForeground)
+                            .symbolRenderingMode(.hierarchical)
+                    }
                 }
             }
             .ingestionToast(transaction: ingestionBinding)
             .sheet(isPresented: $showManualEntry) {
-                ManualTransactionView()
+                ManualTransactionView().solStandardSheet()
+            }
+            .sheet(isPresented: $showCanIAfford) {
+                CanIAffordSheet().solStandardSheet()
             }
         }
         .task {
@@ -79,7 +88,90 @@ struct TodayView: View {
         }
     }
 
-    // MARK: - Ingestion binding (read service, write clears it)
+    // MARK: - Greeting
+
+    @ViewBuilder
+    private var greetingHeader: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(vm.greetingText)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            if !vm.userName.isEmpty {
+                Text(vm.userName)
+                    .font(.title.weight(.bold))
+                    .foregroundStyle(Color.solForeground)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, SolSpacing.lg)
+    }
+
+    // MARK: - Hero Safe-to-Spend
+
+    @ViewBuilder
+    private var heroCard: some View {
+        VStack(spacing: SolSpacing.xs) {
+            Text("Safe to Spend")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.5)
+
+            Text(vm.safeToSpendFormatted)
+                .font(.solHero)
+                .foregroundStyle(LinearGradient.solHero)
+                .monospacedDigit()
+                .contentTransition(.numericText())
+
+            if let perDay = vm.perDayFormatted {
+                Text(perDay)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, SolSpacing.xl)
+        .solGlassCard()
+        .padding(.horizontal, SolSpacing.lg)
+    }
+
+    // MARK: - CanIAfford CTA
+
+    @ViewBuilder
+    private var canIAffordCTA: some View {
+        Button {
+            Haptics.medium()
+            showCanIAfford = true
+        } label: {
+            HStack(spacing: SolSpacing.md) {
+                Image(systemName: "questionmark.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(Color.solCanvas)
+                    .symbolRenderingMode(.hierarchical)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Pot să-mi permit?")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.solCanvas)
+                    Text("Întreabă Solomon înainte să cumperi")
+                        .font(.footnote)
+                        .foregroundStyle(Color.solCanvas.opacity(0.7))
+                }
+                Spacer()
+                Image(systemName: "arrow.right")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.solCanvas)
+            }
+            .padding(.horizontal, SolSpacing.base)
+            .frame(height: 64)
+            .background(LinearGradient.solPrimaryCTA)
+            .clipShape(RoundedRectangle(cornerRadius: SolRadius.xl, style: .continuous))
+            .shadow(color: Color.solPrimary.opacity(0.30), radius: 16, x: 0, y: 6)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, SolSpacing.lg)
+    }
+
+    // MARK: - Ingestion binding
 
     private var ingestionBinding: Binding<SolomonCore.Transaction?> {
         Binding(
@@ -89,105 +181,9 @@ struct TodayView: View {
             }
         )
     }
-
-    // MARK: - Sub-views
-
-    @ViewBuilder
-    private var heroSection: some View {
-        VStack(spacing: SolSpacing.sm) {
-            Text(vm.greetingText)
-                .font(.solBodyMD)
-                .foregroundStyle(Color.solTextSecondary)
-
-            Text(vm.safeToSpendFormatted)
-                .font(.solDisplayLG)
-                .foregroundStyle(Color.solMint)
-                .monospacedDigit()
-
-            Text("disponibil azi")
-                .font(.solCaption)
-                .foregroundStyle(Color.solTextMuted)
-
-            if let perDay = vm.perDayFormatted {
-                Text(perDay)
-                    .font(.solMonoSM)
-                    .foregroundStyle(Color.solTextMuted)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, SolSpacing.xl)
-    }
-
-    @ViewBuilder
-    private var canIAffordQuickAction: some View {
-        VStack(spacing: SolSpacing.base) {
-            sectionHeader("Vrei să cumperi ceva?")
-
-            SolomonButton("Pot să-mi permit?") {
-                vm.showCanIAfford = true
-            }
-            .padding(.horizontal, SolSpacing.screenHorizontal)
-        }
-        .sheet(isPresented: $vm.showCanIAfford) {
-            CanIAffordSheet()
-        }
-    }
-
-    @ViewBuilder
-    private var recentMomentsList: some View {
-        LazyVStack(spacing: SolSpacing.base) {
-            ForEach(vm.recentMoments) { moment in
-                MomentCard(moment: moment)
-            }
-        }
-        .padding(.horizontal, SolSpacing.screenHorizontal)
-    }
-
-    @ViewBuilder
-    private var solomonWordmark: some View {
-        Text("Solomon")
-            .font(.solHeadingMD)
-            .foregroundStyle(Color.solTextPrimary)
-    }
-
-    @ViewBuilder
-    private var notificationButton: some View {
-        Button {
-            // TODO: Navigate to notifications
-        } label: {
-            Image(systemName: vm.hasUnreadAlert ? "bell.badge.fill" : "bell")
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(vm.hasUnreadAlert ? Color.solMint : Color.solTextSecondary)
-        }
-    }
-
-    @ViewBuilder
-    private var addManualButton: some View {
-        Button {
-            showManualEntry = true
-        } label: {
-            Image(systemName: "plus.circle")
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(Color.solTextSecondary)
-        }
-    }
-
-    @ViewBuilder
-    private func sectionHeader(_ title: String) -> some View {
-        HStack {
-            Text(title)
-                .font(.solCaption)
-                .foregroundStyle(Color.solTextMuted)
-                .textCase(.uppercase)
-                .tracking(1.2)
-            Spacer()
-        }
-        .padding(.horizontal, SolSpacing.screenHorizontal)
-    }
 }
-
-// MARK: - Preview
 
 #Preview {
     TodayView()
+        .preferredColorScheme(.dark)
 }

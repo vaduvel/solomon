@@ -51,9 +51,6 @@ struct CanIAffordSheet: View {
                         .foregroundStyle(Color.solMuted)
                 }
             }
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-            .presentationBackground(Color.solCanvas)
         }
     }
 

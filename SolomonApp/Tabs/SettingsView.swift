@@ -47,12 +47,12 @@ struct SettingsView: View {
             .background(Color.solCanvas)
             .navigationTitle("Setări")
             .navigationBarTitleDisplayMode(.large)
-            .sheet(isPresented: $showShortcutSetup) { ShortcutSetupView() }
-            .sheet(isPresented: $showProfileEdit) { ProfileEditView() }
-            .sheet(isPresented: $showGoalsList) { GoalsListView() }
-            .sheet(isPresented: $showSpiralAlert) { SpiralAlertView() }
-            .sheet(isPresented: $showEmailParser) { EmailParserSheet() }
-            .sheet(isPresented: $showModelDownload) { ModelDownloadView() }
+            .sheet(isPresented: $showShortcutSetup) { ShortcutSetupView().solStandardSheet() }
+            .sheet(isPresented: $showProfileEdit) { ProfileEditView().solStandardSheet() }
+            .sheet(isPresented: $showGoalsList) { GoalsListView().solStandardSheet() }
+            .sheet(isPresented: $showSpiralAlert) { SpiralAlertView().solStandardSheet() }
+            .sheet(isPresented: $showEmailParser) { EmailParserSheet().solStandardSheet() }
+            .sheet(isPresented: $showModelDownload) { ModelDownloadView().solStandardSheet() }
             .onAppear {
                 vm.configure(persistence: SolomonPersistenceController.shared)
             }

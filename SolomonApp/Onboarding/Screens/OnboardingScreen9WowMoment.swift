@@ -1,114 +1,213 @@
 import SwiftUI
 import SolomonCore
+import SolomonStorage
+import SolomonMoments
 
-// MARK: - Ecran 9 — Wow Moment
+// MARK: - Ecran 9 — Wow Moment (HIG aligned + MomentEngine real)
 //
-// Conform spec §11 ecran 9:
-//   - Generare LLM cu JSON schema "wow_moment" (vezi §6.2)
-//   - Prezentare structurată în 7 secțiuni
-//   - CTA principal: [Anulează abonamentele fantomă]
-//   - CTA secundar: [Continuă cu Solomon]
-//
-// Faza 13: prezentăm un PLACEHOLDER vizual (numere mock) — generarea LLM
-// reală vine în Faza 14 odată cu MLX integration.
+// Refactor Faza 27: wired la MomentEngine.generateWowMoment cu demo data
+// auto-generat din onboarding state. User vede răspuns LLM real (cu fallback
+// Template dacă MLX nu e disponibil) cu cifrele lui personalizate.
 
 struct OnboardingScreen9WowMoment: View {
     @EnvironmentObject var state: OnboardingState
     let onFinish: () -> Void
 
+    @State private var llmResponse: String?
+    @State private var isGenerating: Bool = true
+
+    private let engine = MomentEngine()
+
     var body: some View {
         ScrollView {
             VStack(spacing: SolSpacing.lg) {
 
-                // Trophy header (Penny mockup screen 16)
-                VStack(spacing: SolSpacing.sm) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.solPrimary.opacity(0.15))
-                            .frame(width: 80, height: 80)
-                        Image(systemName: "trophy.fill")
-                            .font(.system(size: 36))
-                            .foregroundStyle(LinearGradient.solHero)
-                    }
+                // Hero block
+                VStack(spacing: SolSpacing.md) {
+                    Image(systemName: "trophy.fill")
+                        .font(.system(size: 56, weight: .light))
+                        .foregroundStyle(LinearGradient.solHero)
+                        .symbolRenderingMode(.hierarchical)
+                        .frame(width: 96, height: 96)
+                        .background(
+                            Circle()
+                                .fill(Color.solPrimary.opacity(0.15))
+                        )
 
-                    Text("Bună, \(displayName)!")
-                        .font(.solH1)
+                    Text("Bună, \(displayName)")
+                        .font(.largeTitle.weight(.bold))
                         .foregroundStyle(Color.solForeground)
 
                     Text("Iată primul tău raport Solomon")
-                        .font(.solBody)
-                        .foregroundStyle(Color.solMuted)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
                 }
                 .padding(.top, SolSpacing.lg)
 
-                // Hero number
-                VStack(spacing: 6) {
+                // Hero amount
+                VStack(spacing: SolSpacing.xs) {
                     Text("Safe to Spend")
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solMuted)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                         .textCase(.uppercase)
-                        .tracking(1.5)
+                        .tracking(0.5)
+
                     Text(safeToSpendFormatted)
-                        .font(.system(size: 56, weight: .bold, design: .monospaced))
+                        .font(.solHeroBig)
                         .foregroundStyle(LinearGradient.solHero)
+
                     Text("\(perDay) RON / zi · \(daysLeft) zile rămase")
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solMuted)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, SolSpacing.xl)
                 .solGlassCard()
 
-                // Insights placeholder (3 cards)
-                VStack(spacing: SolSpacing.sm) {
-                    insightCard(
-                        icon: "exclamationmark.triangle.fill",
-                        variant: .warn,
-                        title: "Abonamente fantomă",
-                        body: "Avem 2 abonamente nefolosite — ai economisi 78 RON/lună dacă le anulezi."
-                    )
-                    insightCard(
-                        icon: "chart.line.uptrend.xyaxis",
-                        variant: .neon,
-                        title: "Pattern detectat",
-                        body: "Cheltuiești 31% pe livrări mâncare. Media e 12% pentru profilul tău."
-                    )
-                    insightCard(
-                        icon: "checkmark.shield.fill",
-                        variant: .neon,
-                        title: "Zero IFN, zero BNPL",
-                        body: "Nu ai datorii toxice active. Bravo!"
-                    )
+                // LLM response (Solomon "vorbește")
+                if isGenerating {
+                    HStack(spacing: SolSpacing.sm) {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(Color.solPrimary)
+                        Text("Solomon analizează...")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(SolSpacing.base)
+                    .frame(maxWidth: .infinity)
+                    .solCard()
+                } else if let llm = llmResponse, !llm.isEmpty {
+                    HStack(alignment: .top, spacing: SolSpacing.sm) {
+                        Image(systemName: "sparkles")
+                            .font(.body)
+                            .foregroundStyle(Color.solPrimary)
+                        Text(llm)
+                            .font(.body)
+                            .foregroundStyle(Color.solForeground)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(SolSpacing.base)
+                    .solAIInsightCard()
                 }
 
-                Spacer().frame(height: SolSpacing.lg)
-
-                // CTAs
+                // Insights placeholder
                 VStack(spacing: SolSpacing.sm) {
-                    SolomonButton("Anulează abonamentele fantomă", icon: "scissors") {
-                        finish()
-                    }
-                    SolomonButton("Continuă cu Solomon", style: .secondary) {
-                        finish()
-                    }
+                    insightRow(icon: "exclamationmark.triangle.fill",
+                               iconColor: .solWarning,
+                               title: "Abonamente fantomă",
+                               body: "2 abonamente nefolosite — 78 RON/lună.")
+                    insightRow(icon: "checkmark.shield.fill",
+                               iconColor: .solPrimary,
+                               title: "Zero IFN, zero BNPL",
+                               body: "Nu ai datorii toxice. Bravo!")
                 }
             }
-            .padding(.horizontal, SolSpacing.screenHorizontal)
-            .padding(.bottom, SolSpacing.xl)
+            .padding(.horizontal, SolSpacing.lg)
+            .padding(.bottom, SolSpacing.xxxl)
+        }
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: SolSpacing.sm) {
+                SolomonButton("Continuă cu Solomon", icon: "arrow.right") {
+                    Haptics.success()
+                    onFinish()
+                }
+            }
+            .padding(.horizontal, SolSpacing.lg)
+            .padding(.vertical, SolSpacing.base)
+            .background(.ultraThinMaterial)
+        }
+        .task {
+            await generateMoment()
         }
     }
 
-    // MARK: - Mock data
+    // MARK: - Insight row
+
+    @ViewBuilder
+    private func insightRow(icon: String, iconColor: Color, title: String, body: String) -> some View {
+        HStack(alignment: .top, spacing: SolSpacing.md) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(iconColor)
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(Color.solForeground)
+                Text(body)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+        }
+        .padding(SolSpacing.base)
+        .solCard()
+    }
+
+    // MARK: - Generation
+
+    private func generateMoment() async {
+        isGenerating = true
+        defer { isGenerating = false }
+
+        // Construim un Snapshot minimal din state (fără să atingem CoreData încă)
+        let demographic = DemographicProfile(
+            name: state.name.isEmpty ? "prietene" : state.name,
+            addressing: state.addressing,
+            ageRange: .range25to35
+        )
+        let financial = FinancialProfile(
+            salaryRange: state.salaryRange ?? .range5to8,
+            salaryFrequency: .monthly(dayOfMonth: state.paydayDay),
+            hasSecondaryIncome: state.hasSecondaryIncome,
+            primaryBank: state.primaryBank ?? .other
+        )
+        let profile = UserProfile(demographics: demographic, financials: financial)
+
+        // Construim obligații din draft (cele cu nume + sumă valid)
+        let obligations: [Obligation] = state.draftObligations
+            .filter { !$0.name.isEmpty && $0.amountRON > 0 }
+            .map { d in
+                Obligation(
+                    id: UUID(),
+                    name: d.name,
+                    amount: Money(d.amountRON),
+                    dayOfMonth: d.dayOfMonth,
+                    kind: d.kind,
+                    confidence: .declared,
+                    since: Date()
+                )
+            }
+
+        let snapshot = MomentEngine.Snapshot(
+            userProfile: profile,
+            transactions: [],
+            obligations: obligations,
+            subscriptions: [],
+            goals: []
+        )
+
+        do {
+            let output = try await engine.generateWowMoment(snapshot: snapshot)
+            llmResponse = output.llmResponse
+        } catch {
+            llmResponse = nil
+        }
+    }
+
+    // MARK: - Mock cifre din state
 
     private var displayName: String {
         state.name.isEmpty ? "prieten" : state.name
     }
 
     private var safeToSpendValue: Int {
-        // Estimare simplificată: salariul - obligații
         let salary = state.salaryRange?.midpointRON ?? 5000
         let obligations = state.draftObligations.reduce(0) { $0 + $1.amountRON }
-        return max(0, salary - obligations - 1500)  // -1500 reservation pentru utilities/food
+        return max(0, salary - obligations - 1500)
     }
 
     private var safeToSpendFormatted: String {
@@ -125,32 +224,6 @@ struct OnboardingScreen9WowMoment: View {
         let today = cal.component(.day, from: Date())
         let payday = state.paydayDay
         return payday > today ? (payday - today) : (30 - today + payday)
-    }
-
-    // MARK: - Subview
-
-    private func insightCard(icon: String, variant: IconContainer.Variant, title: String, body: String) -> some View {
-        HStack(alignment: .top, spacing: SolSpacing.md) {
-            IconContainer(systemName: icon, variant: variant, size: 36, iconSize: 14)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.solBodyBold)
-                    .foregroundStyle(Color.solForeground)
-                Text(body)
-                    .font(.solCaption)
-                    .foregroundStyle(Color.solMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer()
-        }
-        .padding(SolSpacing.base)
-        .solCard()
-    }
-
-    // MARK: - Finish
-
-    private func finish() {
-        onFinish()
     }
 }
 

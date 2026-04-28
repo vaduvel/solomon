@@ -53,10 +53,10 @@ struct GoalsListView: View {
                 }
             }
             .sheet(isPresented: $showAddGoal, onDismiss: load) {
-                GoalEditView()
+                GoalEditView().solStandardSheet()
             }
             .sheet(item: $editingGoal, onDismiss: load) { g in
-                GoalEditView(editingGoal: g)
+                GoalEditView(editingGoal: g).solStandardSheet()
             }
             .onAppear { load() }
         }

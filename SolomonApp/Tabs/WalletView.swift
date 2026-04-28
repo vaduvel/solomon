@@ -18,48 +18,53 @@ struct WalletView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.solCanvas.ignoresSafeArea()
+            VStack(spacing: 0) {
+                // Segmented Picker NATIV iOS HIG
+                Picker("Selecție", selection: $selectedSegment) {
+                    Text("Obligații").tag(0)
+                    Text("Abonamente").tag(1)
+                    Text("Tranzacții").tag(2)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, SolSpacing.lg)
+                .padding(.vertical, SolSpacing.sm)
+                .onChange(of: selectedSegment) { _, _ in Haptics.selection() }
 
-                VStack(spacing: 0) {
-                    segmentControl
-                        .padding(.horizontal, SolSpacing.screenHorizontal)
-                        .padding(.vertical, SolSpacing.base)
-
-                    ScrollView(showsIndicators: false) {
-                        VStack(spacing: SolSpacing.sectionGap) {
-                            switch selectedSegment {
-                            case 0: obligationsSection
-                            case 1: subscriptionsSection
-                            default: transactionsSection
-                            }
-                            Spacer(minLength: SolSpacing.hh)
+                ScrollView {
+                    VStack(spacing: SolSpacing.xl) {
+                        switch selectedSegment {
+                        case 0: obligationsSection
+                        case 1: subscriptionsSection
+                        default: transactionsSection
                         }
-                        .padding(.top, SolSpacing.base)
+                        Spacer(minLength: SolSpacing.xxxl)
                     }
+                    .padding(.top, SolSpacing.base)
                 }
             }
+            .background(Color.solCanvas)
             .navigationTitle("Portofel")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        Haptics.light()
                         showManualEntry = true
                     } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundStyle(LinearGradient.solHero)
+                        Image(systemName: "plus")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(Color.solPrimary)
                     }
                 }
             }
             .sheet(isPresented: $showSubscriptionAudit, onDismiss: { Task { await vm.load() } }) {
-                SubscriptionAuditView()
+                SubscriptionAuditView().solStandardSheet()
             }
             .sheet(isPresented: $showSuspiciousTransactions, onDismiss: { Task { await vm.load() } }) {
-                SuspiciousTransactionsView()
+                SuspiciousTransactionsView().solStandardSheet()
             }
             .sheet(isPresented: $showManualEntry, onDismiss: { Task { await vm.load() } }) {
-                ManualTransactionView()
+                ManualTransactionView().solStandardSheet()
             }
         }
         .task {
