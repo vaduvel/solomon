@@ -38,6 +38,14 @@ final class TodayViewModel {
     var daysUntilPayday: Int = 0
     var safeToSpendStatus: String = "SIGUR"
 
+    // MARK: - Editorial v3 — section 01 SOLOMON SPUNE / 02 OBIECTIV / 03 ISTORIC
+
+    /// Toate abonamentele user-ului — folosit în moment-card "Audit abonamente"
+    /// pentru a afișa sub-rows cu fiecare subscription (Netflix/HBO/Spotify, etc.).
+    var subscriptions: [Subscription] = []
+    /// Goal-ul activ cu cea mai recentă activitate (pentru section 02 OBIECTIV ACTIV)
+    var activeGoal: Goal?
+
     /// Numărul formatat cu separator de mii românesc: "2.847"
     var safeToSpendAmountFormatted: String {
         guard safeToSpendRON > 0 else { return "..." }
@@ -104,6 +112,10 @@ final class TodayViewModel {
         // Lansăm budget și moment concurent:
         // refreshBudget e rapid (CoreData sync), refreshMoment suspendă pe LLM inference.
         // Cu async let, bugetul apare în UI fără să aștepte inferența LLM.
+        // Load subscriptions + active goal pentru editorial v3 layout
+        subscriptions = (try? subscriptionRepo?.fetchAll()) ?? []
+        activeGoal = (try? goalRepo?.fetchAll())?.first
+
         async let budget: Void = refreshBudget(profile: profile)
         async let moment: Void = refreshMoment(profile: profile)
         await budget
