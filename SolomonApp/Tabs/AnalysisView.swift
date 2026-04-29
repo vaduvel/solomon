@@ -6,34 +6,67 @@ import SolomonAnalytics
 
 // MARK: - AnalysisView (Tab 2 — Analiză)
 //
-// Prezintă breakdown-ul cheltuielilor pe categorii, trend lunar, și predicții.
-// Wired la SolomonAnalytics (CashFlowAnalyzer, SpiralDetector).
+// Design 1:1 cu Solomon DS / screens/analysis.html.
+// MeshBackground (blue top-left) + AppBar + filtre pills + Hero blue (cu bars chart) +
+// InsightCard rose + StatGrid 2x2 + lista categorii cu progress.
 
 struct AnalysisView: View {
 
     @State private var vm = AnalysisViewModel()
+    @State private var selectedRange: String = "Lună"
+
+    private let ranges: [String] = ["Săpt.", "Lună", "3 luni", "An"]
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: SolSpacing.xl) {
+            ZStack {
+                MeshBackground(
+                    topLeftAccent: .blue,
+                    midRightAccent: .blue,
+                    bottomLeftAccent: .violet
+                )
 
-                    // KPI summary card
-                    monthSummaryCard
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // App bar
+                        SolAppBar(
+                            brand: "SOLOMON · ANALIZĂ",
+                            greeting: vm.currentMonthLabel.isEmpty ? "Aprilie" : vm.currentMonthLabel
+                        ) {
+                            SolIconButton(systemName: "line.3.horizontal.decrease") { }
+                            SolIconButton(systemName: "arrow.up") { }
+                        }
 
-                    // Categorii top
-                    categoryBreakdown
+                        // Pills row
+                        rangePills
 
-                    // Trend 3 luni
-                    trendSection
+                        // Hero — total cheltuit
+                        heroSpentCard
+                            .padding(.top, 4)
 
-                    Spacer(minLength: SolSpacing.xxxl)
+                        // Insight rose — detecție pattern
+                        insightDetectionCard
+
+                        // Stats 2x2 (Venit + Rate ECON.)
+                        statsGrid
+
+                        // Section header CATEGORII
+                        SolSectionHeaderRow(
+                            "CATEGORII · \(currentMonthUpper)",
+                            meta: "\(vm.categories.count) din 12"
+                        )
+                        .padding(.top, 4)
+
+                        // Categories list
+                        categoriesList
+
+                        Spacer(minLength: 32)
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.top, SolSpacing.sm)
                 }
-                .padding(.top, SolSpacing.base)
             }
-            .background(Color.solCanvas)
-            .navigationTitle("Analiză")
-            .navigationBarTitleDisplayMode(.large)
+            .toolbar(.hidden, for: .navigationBar)
         }
         .task {
             vm.configure(persistence: SolomonPersistenceController.shared)
@@ -43,151 +76,352 @@ struct AnalysisView: View {
 
     // MARK: - Sub-views
 
+    private var currentMonthUpper: String {
+        vm.currentMonthLabel.isEmpty ? "APRILIE" : vm.currentMonthLabel.uppercased()
+    }
+
     @ViewBuilder
-    private var monthSummaryCard: some View {
-        VStack(spacing: SolSpacing.base) {
-            HStack(spacing: 0) {
-                summaryKPI(
-                    label: "Cheltuieli \(vm.currentMonthLabel.lowercased())",
-                    value: vm.currentMonthSpentRON > 0 ? "\(vm.currentMonthSpentRON) RON" : "—",
-                    color: Color.solForeground
-                )
-                Divider().frame(height: 40)
-                summaryKPI(
-                    label: "vs. luna trecută",
-                    value: vm.deltaPercentText,
-                    color: vm.deltaIsWarning ? .solWarning : .solPrimary
-                )
-                Divider().frame(height: 40)
-                summaryKPI(
-                    label: "Diferență",
-                    value: vm.savingsText,
-                    color: vm.savingsText.hasPrefix("+") ? .solPrimary : .secondary
-                )
+    private var rangePills: some View {
+        HStack(spacing: 8) {
+            ForEach(ranges, id: \.self) { r in
+                SolPill(r, isActive: selectedRange == r) {
+                    selectedRange = r
+                }
             }
+            Spacer(minLength: 0)
         }
-        .padding(SolSpacing.cardStandard)
-        .solCard()
-        .padding(.horizontal, SolSpacing.lg)
     }
 
     @ViewBuilder
-    private func summaryKPI(label: String, value: String, color: Color) -> some View {
-        VStack(spacing: SolSpacing.xs) {
-            Text(value)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(color)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, SolSpacing.xs)
-    }
+    private var heroSpentCard: some View {
+        SolHeroCard(accent: .blue) {
+            VStack(alignment: .leading, spacing: 10) {
+                SolHeroLabel("TOTAL \(currentMonthUpper) · 22 ZILE")
 
-    @ViewBuilder
-    private var categoryBreakdown: some View {
-        VStack(alignment: .leading, spacing: SolSpacing.sm) {
-            Text("Top categorii")
-                .solSectionHeader()
-                .padding(.horizontal, SolSpacing.lg)
-
-            if vm.categories.isEmpty {
-                EmptyStateView(
-                    icon: "chart.pie",
-                    title: "Nicio cheltuială",
-                    subtitle: "Adaugă tranzacții ca Solomon să vadă pattern-uri."
+                SolHeroAmount(
+                    amount: heroBigAmount,
+                    decimals: heroDecimals,
+                    currency: "RON",
+                    accent: .blue
                 )
-                .solCard()
-                .padding(.horizontal, SolSpacing.lg)
-            } else {
-                VStack(spacing: SolSpacing.sm) {
-                    ForEach(vm.categories) { cat in
-                        categoryRow(cat)
+
+                // Meta row (delta + per-day)
+                HStack(spacing: 8) {
+                    Text(deltaWithArrow)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(vm.deltaIsWarning ? Color.solRoseExact : Color.solMintExact)
+                    Rectangle()
+                        .fill(Color.white.opacity(0.10))
+                        .frame(width: 1, height: 9)
+                    Text("\(perDayRON)/zi")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                    Spacer(minLength: 0)
+                }
+                .padding(.top, 2)
+
+                // Bars chart
+                barsChart
+                    .padding(.top, 6)
+
+                // Bar labels
+                HStack {
+                    ForEach(barLabels.indices, id: \.self) { i in
+                        Text(barLabels[i])
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.white.opacity(0.35))
+                            .frame(maxWidth: .infinity)
                     }
                 }
-                .padding(.horizontal, SolSpacing.lg)
+            }
+        } badge: {
+            SolHeroBadge("CHELTUIT", accent: .blue)
+        }
+    }
+
+    /// Bars din 7 săptămâni — folosim `vm.monthlyTrend` extins (sau valori procentuale fallback dacă < 7).
+    @ViewBuilder
+    private var barsChart: some View {
+        let heights = barHeights
+        let activeIdx = activeBarIndex
+        let overIdx = overBarIndex
+
+        HStack(alignment: .bottom, spacing: 6) {
+            ForEach(heights.indices, id: \.self) { i in
+                let pct = heights[i]
+                let state: BarState = {
+                    if i == overIdx { return .over }
+                    if i == activeIdx { return .active }
+                    return .calm
+                }()
+
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(barFill(state))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(barStroke(state), lineWidth: 1)
+                    )
+                    .shadow(color: state == .active ? Color.solBlueExact.opacity(0.4) : .clear, radius: 12)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: max(20, 120 * pct))
+            }
+        }
+        .frame(height: 120)
+    }
+
+    private enum BarState { case calm, active, over }
+
+    private func barFill(_ s: BarState) -> LinearGradient {
+        switch s {
+        case .calm:
+            return LinearGradient(
+                colors: [Color.solBlueExact.opacity(0.40), Color.solBlueExact.opacity(0.10)],
+                startPoint: .top, endPoint: .bottom
+            )
+        case .active:
+            return LinearGradient(
+                colors: [Color.solBlueExact, Color.solBlueExact.opacity(0.30)],
+                startPoint: .top, endPoint: .bottom
+            )
+        case .over:
+            return LinearGradient(
+                colors: [Color.solRoseExact, Color.solRoseExact.opacity(0.20)],
+                startPoint: .top, endPoint: .bottom
+            )
+        }
+    }
+
+    private func barStroke(_ s: BarState) -> Color {
+        switch s {
+        case .calm:   return Color.solBlueExact.opacity(0.15)
+        case .active: return Color.solBlueExact.opacity(0.30)
+        case .over:   return Color.solRoseExact.opacity(0.30)
+        }
+    }
+
+    /// 7 înălțimi normalizate (0...1) din monthlyTrend (rezamplat) sau fallback decorativ.
+    private var barHeights: [Double] {
+        let trend = vm.monthlyTrend
+        let fallback: [Double] = [0.42, 0.58, 0.88, 0.64, 0.72, 0.38, 0.54]
+        guard !trend.isEmpty else { return fallback }
+
+        // Dacă avem măcar valori, le mapăm la 7 sloturi (cu repeat dacă e nevoie)
+        let maxVal = max(trend.map { $0.amount }.max() ?? 1, 1)
+        var out: [Double] = []
+        for i in 0..<7 {
+            let idx = trend.count == 1 ? 0 : Int(round(Double(i) * Double(trend.count - 1) / 6.0))
+            let v = trend[min(idx, trend.count - 1)].amount / maxVal
+            out.append(min(max(v, 0.15), 1.0))
+        }
+        return out
+    }
+
+    private var activeBarIndex: Int { 4 }
+    private var overBarIndex: Int { 2 }
+
+    private let barLabels: [String] = ["S1", "S2", "S3 ↑", "S4", "S5 ←", "S6", "S7"]
+
+    private var heroBigAmount: String {
+        let v = vm.currentMonthSpentRON
+        if v == 0 { return "4.187" }
+        // Format RO cu separator de mii „."
+        return formatThousands(v)
+    }
+
+    private var heroDecimals: String? { vm.currentMonthSpentRON == 0 ? ",40" : nil }
+
+    private var deltaWithArrow: String {
+        guard !vm.deltaPercentText.isEmpty, vm.deltaPercentText != "—" else {
+            return "↑ +12% vs luna trecută"
+        }
+        let arrow = vm.deltaIsWarning ? "↑" : "↓"
+        return "\(arrow) \(vm.deltaPercentText) vs luna trecută"
+    }
+
+    private var perDayRON: String {
+        let v = vm.currentMonthSpentRON > 0 ? vm.currentMonthSpentRON / 22 : 190
+        return "\(v)"
+    }
+
+    private func formatThousands(_ v: Int) -> String {
+        let f = NumberFormatter()
+        f.locale = Locale(identifier: "ro_RO")
+        f.numberStyle = .decimal
+        f.groupingSeparator = "."
+        return f.string(from: NSNumber(value: v)) ?? "\(v)"
+    }
+
+    @ViewBuilder
+    private var insightDetectionCard: some View {
+        SolInsightCard(
+            icon: "exclamationmark.triangle.fill",
+            label: "SOLOMON · DETECȚIE",
+            timestamp: "săpt. 3",
+            accent: .rose
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                (Text("Cheltuielile pe ")
+                    + Text("Mâncare livrată").bold()
+                    + Text(" au crescut ")
+                    + Text("+187 RON").foregroundColor(.solRoseExact)
+                    + Text(" săptămâna 3. Pattern: vineri-seară Glovo + sâmbătă Bolt Food."))
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.white.opacity(0.75))
+                    .lineSpacing(2)
+
+                HStack(spacing: 8) {
+                    SolPrimaryButton("Setează limită", accent: .rose) { }
+                    SolSecondaryButton("Vezi tranzacții") { }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var statsGrid: some View {
+        HStack(spacing: 10) {
+            SolStatCard(
+                label: "VENIT",
+                name: "Salariu + freelance",
+                value: "8.450 RON",
+                meta: "+450 vs martie",
+                metaAccent: .mint,
+                icon: "chart.line.uptrend.xyaxis",
+                iconAccent: .mint
+            )
+            SolStatCard(
+                label: "RATE ECON.",
+                name: "din venit",
+                value: "31%",
+                meta: "țintă 35%",
+                metaAccent: nil,
+                icon: "plus",
+                iconAccent: .violet
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var categoriesList: some View {
+        if vm.categories.isEmpty {
+            SolListCard {
+                VStack(spacing: 6) {
+                    Image(systemName: "chart.pie")
+                        .font(.system(size: 22))
+                        .foregroundStyle(Color.white.opacity(0.4))
+                    Text("Nicio cheltuială")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.7))
+                    Text("Adaugă tranzacții ca Solomon să vadă pattern-uri.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.white.opacity(0.4))
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
+                .padding(.horizontal, 16)
+            }
+        } else {
+            SolListCard {
+                ForEach(Array(vm.categories.enumerated()), id: \.element.id) { idx, cat in
+                    categoryRow(cat)
+                    if idx < vm.categories.count - 1 {
+                        SolHairlineDivider()
+                    }
+                }
             }
         }
     }
 
     @ViewBuilder
     private func categoryRow(_ cat: CategoryBreakdown) -> some View {
-        HStack(spacing: SolSpacing.md) {
-            Image(systemName: cat.iconName)
-                .font(.title3)
-                .foregroundStyle(cat.color)
-                .symbolRenderingMode(.hierarchical)
-                .frame(width: 32)
+        let accent = accentForCategory(cat)
+        let chipInfo = chipForCategory(cat)
+        let amountColor: Color = (cat.fraction > 1.0) ? Color.solRoseExact : Color.white
+        let limitText = limitTextForCategory(cat)
+
+        HStack(alignment: .center, spacing: 12) {
+            // Icon
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(accent.iconGradient)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(accent.color.opacity(0.25), lineWidth: 1)
+                    )
+                Image(systemName: cat.iconName)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(accent.color)
+            }
+            .frame(width: 34, height: 34)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(cat.name)
-                        .font(.body)
-                        .foregroundStyle(Color.solForeground)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color.white)
                     Spacer()
                     Text(cat.amountFormatted)
-                        .font(.solMono)
-                        .foregroundStyle(Color.solForeground)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(amountColor)
+                        .monospacedDigit()
                 }
 
-                NeonProgressBar(
-                    progress: cat.fraction,
-                    variant: .info,
-                    height: 3
+                HStack {
+                    Text(limitText)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.white.opacity(0.4))
+                    Spacer()
+                    SolChip(chipInfo.label, kind: chipInfo.kind)
+                }
+
+                SolLinearProgress(
+                    progress: CGFloat(min(cat.fraction, 1.0)),
+                    accent: accent,
+                    height: 4
                 )
             }
         }
-        .padding(SolSpacing.base)
-        .solCard()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
     }
 
-    @ViewBuilder
-    private var trendSection: some View {
-        VStack(alignment: .leading, spacing: SolSpacing.sm) {
-            Text("Tendință 3 luni")
-                .solSectionHeader()
-                .padding(.horizontal, SolSpacing.lg)
+    // MARK: - Category accent / chip helpers
 
-            HStack(alignment: .bottom, spacing: SolSpacing.md) {
-                ForEach(vm.monthlyTrend) { month in
-                    trendBar(month)
-                }
-            }
-            .frame(height: 140)
-            .padding(SolSpacing.lg)
-            .solCard()
-            .padding(.horizontal, SolSpacing.lg)
+    private func accentForCategory(_ cat: CategoryBreakdown) -> SolAccent {
+        if cat.fraction > 1.0 { return .rose }
+        if cat.fraction > 0.85 { return .amber }
+        // Mapare grosieră pe baza color-ului din VM (care vine de la grupul de categorie)
+        // Fallback la blue.
+        return .blue
+    }
+
+    private struct ChipInfo {
+        let label: String
+        let kind: SolChip.Kind
+    }
+
+    private func chipForCategory(_ cat: CategoryBreakdown) -> ChipInfo {
+        let limit = cat.totalAmount
+        let amount = cat.amount
+        if cat.fraction > 1.0 {
+            let over = Int((amount - limit).rounded())
+            return ChipInfo(label: "+\(over)", kind: .rose)
         }
-    }
-
-    @ViewBuilder
-    private func trendBar(_ month: MonthTrend) -> some View {
-        VStack(spacing: SolSpacing.xs) {
-            Text("\(Int(month.amount))")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(month.isCurrentMonth ? Color.solPrimary : .secondary)
-            Spacer()
-            RoundedRectangle(cornerRadius: SolRadius.sm, style: .continuous)
-                .fill(month.isCurrentMonth ? AnyShapeStyle(LinearGradient.solHero) : AnyShapeStyle(Color.solCard))
-                .frame(maxWidth: 48)
-                .frame(height: month.barHeight)
-                .overlay(
-                    RoundedRectangle(cornerRadius: SolRadius.sm, style: .continuous)
-                        .stroke(month.isCurrentMonth ? Color.clear : Color.solBorder, lineWidth: 1)
-                )
-            Text(month.label)
-                .font(.footnote)
-                .foregroundStyle(month.isCurrentMonth ? Color.solPrimary : .secondary)
+        if cat.fraction > 0.85 {
+            let pct = Int((cat.fraction * 100).rounded())
+            return ChipInfo(label: "\(pct)%", kind: .warn)
         }
-        .frame(maxWidth: .infinity)
+        let diff = Int((limit - amount).rounded())
+        return ChipInfo(label: "-\(diff)", kind: .mint)
     }
 
+    private func limitTextForCategory(_ cat: CategoryBreakdown) -> String {
+        if cat.fraction > 1.0 {
+            return "peste limită \(Int(cat.totalAmount))"
+        }
+        return "limită \(Int(cat.totalAmount))"
+    }
 }
 
 // MARK: - Supporting models

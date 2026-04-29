@@ -3,10 +3,10 @@ import Observation
 import SolomonCore
 import SolomonStorage
 
-// MARK: - SettingsView (HIG aligned — insetGrouped Form)
+// MARK: - SettingsView (Solomon DS — Claude Design v3)
 //
-// Refactor Faza 27: convert la nativ Form/.insetGrouped pattern Apple
-// (ce vezi în Settings.app iOS).
+// Redesign Faza 33: aliniat 1:1 cu Solomon DS / screens/settings.html.
+// MeshBackground + AppBar + Profile card + 4 secțiuni cu ListCard + #if DEBUG.
 
 struct SettingsView: View {
 
@@ -18,6 +18,11 @@ struct SettingsView: View {
     @State private var showEmailParser = false
     @State private var showModelDownload = false
     @State private var showDebugAlert: DebugAlertKind?
+
+    // Toggles care nu există încă în VM — local state pentru pilot
+    @State private var faceIDEnabled: Bool = true
+    @State private var weeklyInsights: Bool = true
+    @State private var paymentReminders: Bool = false
 
     enum DebugAlertKind: Identifiable {
         case demoGenerated, dataCleared, onboardingReset
@@ -34,20 +39,44 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                profileSection
-                connectionsSection
-                notificationsSection
-                subscriptionSection
-                aboutSection
-                #if DEBUG
-                debugSection
-                #endif
+            ZStack {
+                MeshBackground()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        SolAppBar(brand: "SOLOMON · PROFIL", greeting: "Setări") {
+                            EmptyView()
+                        }
+
+                        profileCard
+                            .padding(.bottom, 16)
+
+                        SolSectionHeaderRow("Date & Securitate")
+                        dataSecurityCard
+                            .padding(.bottom, 16)
+
+                        SolSectionHeaderRow("Notificări")
+                        notificationsCard
+                            .padding(.bottom, 16)
+
+                        SolSectionHeaderRow("Preferințe")
+                        preferencesCard
+                            .padding(.bottom, 16)
+
+                        SolSectionHeaderRow("Despre")
+                        aboutCard
+                            .padding(.bottom, 16)
+
+                        #if DEBUG
+                        SolSectionHeaderRow("Debug")
+                        debugCard
+                            .padding(.bottom, 16)
+                        #endif
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 100)
+                }
             }
-            .scrollContentBackground(.hidden)
-            .background(Color.solCanvas)
-            .navigationTitle("Setări")
-            .navigationBarTitleDisplayMode(.large)
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showShortcutSetup) { ShortcutSetupView().solStandardSheet() }
             .sheet(isPresented: $showProfileEdit) { ProfileEditView().solStandardSheet() }
             .sheet(isPresented: $showGoalsList) { GoalsListView().solStandardSheet() }
@@ -75,227 +104,288 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Sections (Apple Form pattern)
+    // MARK: - Profile Card
 
-    @ViewBuilder
-    private var profileSection: some View {
-        Section {
-            // Avatar + Name + Plan
-            HStack(spacing: SolSpacing.md) {
-                ZStack {
-                    Circle()
-                        .fill(LinearGradient.solHero)
-                        .frame(width: 52, height: 52)
-                    Text(String(vm.userName.prefix(1)).uppercased())
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(Color.solCanvas)
+    private var profileCard: some View {
+        HStack(spacing: 14) {
+            // Avatar 54×54 rounded sq 18, gradient mint
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [.solMintExact, .solMintDeep],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                            .blendMode(.plusLighter)
+                    )
+                    .shadow(color: Color.solMintExact.opacity(0.4), radius: 10, x: 0, y: 8)
+                Text(initials(from: vm.userName))
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Color(red: 0x05/255, green: 0x2E/255, blue: 0x16/255))
+                    .tracking(-0.5)
+            }
+            .frame(width: 54, height: 54)
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(vm.userName)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                Text(vm.connectedBanksLabel.isEmpty ? "Conturi: ING + BT · 47 lună activ" : "Conturi: \(vm.connectedBanksLabel) · 47 lună activ")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.white.opacity(0.5))
+                    .padding(.top, 2)
+                HStack(spacing: 6) {
+                    SolChip("Pro", kind: .mint)
+                    SolChip("→ Plan", kind: .muted)
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(vm.userName)
-                        .font(.headline)
-                        .foregroundStyle(Color.solForeground)
-                    Text(vm.userPlan)
-                        .font(.footnote)
-                        .foregroundStyle(Color.solPrimary)
+                .padding(.top, 8)
+            }
+            Spacer()
+        }
+        .padding(18)
+        .background(
+            LinearGradient(
+                colors: [Color.white.opacity(0.04), Color.white.opacity(0.015)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .background(.ultraThinMaterial.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.07), lineWidth: 1)
+        )
+    }
+
+    // MARK: - Data & Security
+
+    private var dataSecurityCard: some View {
+        SolListCard {
+            SettingsRow(
+                icon: "faceid",
+                accent: .mint,
+                title: "Face ID",
+                kind: .toggle(isOn: $faceIDEnabled)
+            )
+            SolHairlineDivider()
+            SettingsRow(
+                icon: "creditcard.fill",
+                accent: .blue,
+                title: "Conturi conectate",
+                kind: .valueChevron(value: vm.connectedBanksLabel.isEmpty ? "0 active" : "\(vm.connectedBanks.count) active"),
+                onTap: { showShortcutSetup = true }
+            )
+            SolHairlineDivider()
+            SettingsRow(
+                icon: "person.text.rectangle.fill",
+                accent: .violet,
+                title: "Date personale",
+                kind: .chevron,
+                onTap: { showProfileEdit = true }
+            )
+            SolHairlineDivider()
+            SettingsRow(
+                icon: "tray.and.arrow.down.fill",
+                accent: .blue,
+                title: "Importă din email",
+                kind: .chevron,
+                onTap: { showEmailParser = true }
+            )
+        }
+    }
+
+    // MARK: - Notifications
+
+    private var notificationsCard: some View {
+        SolListCard {
+            SettingsRow(
+                icon: "bell.fill",
+                accent: .amber,
+                title: "Alerte critice",
+                kind: .toggle(isOn: $vm.notificationsEnabled)
+            )
+            SolHairlineDivider()
+            SettingsRow(
+                icon: "chart.line.uptrend.xyaxis",
+                accent: .mint,
+                title: "Insights săptămânale",
+                kind: .toggle(isOn: $weeklyInsights)
+            )
+            SolHairlineDivider()
+            SettingsRow(
+                icon: "clock.fill",
+                accent: .gray,
+                title: "Reminder plăți",
+                kind: .toggle(isOn: $paymentReminders)
+            )
+            SolHairlineDivider()
+            SettingsRow(
+                icon: "shield.lefthalf.filled",
+                accent: .amber,
+                title: "Verificare spirală",
+                kind: .chevron,
+                onTap: { showSpiralAlert = true }
+            )
+        }
+    }
+
+    // MARK: - Preferences
+
+    private var preferencesCard: some View {
+        SolListCard {
+            SettingsRow(
+                icon: "dollarsign.circle.fill",
+                accent: .gray,
+                title: "Monedă",
+                kind: .valueChevron(value: "RON"),
+                onTap: { Haptics.light() }
+            )
+            SolHairlineDivider()
+            SettingsRow(
+                icon: "globe",
+                accent: .gray,
+                title: "Limbă",
+                kind: .valueChevron(value: "Română"),
+                onTap: { Haptics.light() }
+            )
+            SolHairlineDivider()
+            SettingsRow(
+                icon: "calendar",
+                accent: .gray,
+                title: "Început lună salarială",
+                kind: .valueChevron(value: "ziua 1"),
+                onTap: { Haptics.light() }
+            )
+            SolHairlineDivider()
+            SettingsRow(
+                icon: "brain.head.profile",
+                accent: .gray,
+                title: "Contribuie la training",
+                kind: .toggle(isOn: $vm.trainingOptIn)
+            )
+        }
+    }
+
+    // MARK: - About
+
+    private var aboutCard: some View {
+        SolListCard {
+            SettingsRow(
+                icon: "crown.fill",
+                accent: .amber,
+                title: vm.userPlan,
+                kind: .valueChevron(value: "Gestionează"),
+                onTap: { openURL("https://apps.apple.com/account/subscriptions") }
+            )
+            SolHairlineDivider()
+            SettingsRow(
+                icon: "cpu.fill",
+                accent: .blue,
+                title: "Modelul LLM",
+                kind: .chevron,
+                onTap: { showModelDownload = true }
+            )
+            SolHairlineDivider()
+            SettingsRow(
+                icon: "lock.shield.fill",
+                accent: .gray,
+                title: "Confidențialitate",
+                kind: .chevron,
+                onTap: { openURL("https://solomon.ro/privacy") }
+            )
+            SolHairlineDivider()
+            SettingsRow(
+                icon: "doc.text.fill",
+                accent: .gray,
+                title: "Termeni de utilizare",
+                kind: .chevron,
+                onTap: { openURL("https://solomon.ro/terms") }
+            )
+            SolHairlineDivider()
+            SettingsRow(
+                icon: "info.circle.fill",
+                accent: .gray,
+                title: "Versiune",
+                kind: .value(value: versionString)
+            )
+            SolHairlineDivider()
+            SettingsRow(
+                icon: "xmark",
+                accent: .rose,
+                title: "Deconectare",
+                titleColor: .solRoseExact,
+                kind: .none,
+                onTap: {
+                    Haptics.warning()
+                    OnboardingState.resetForDebug()
+                    showDebugAlert = .onboardingReset
                 }
-                Spacer()
-            }
-            .padding(.vertical, SolSpacing.xs)
-            .listRowBackground(Color.solCard)
-
-            navRow(icon: "person.fill", iconColor: .solCyan, label: "Profil financiar") {
-                showProfileEdit = true
-            }
-
-            navRow(icon: "target", iconColor: .solPrimary, label: "Obiective") {
-                showGoalsList = true
-            }
-        } header: {
-            Text("Profil")
+            )
         }
     }
 
-    @ViewBuilder
-    private var connectionsSection: some View {
-        Section {
-            navRow(icon: "app.badge", iconColor: .solPrimary, label: "Conectează banca", value: vm.connectedBanksLabel) {
-                showShortcutSetup = true
-            }
-            navRow(icon: "tray.and.arrow.down.fill", iconColor: .solCyan, label: "Importă din email") {
-                showEmailParser = true
-            }
-            Toggle(isOn: $vm.notificationsEnabled) {
-                Label("Notificări push", systemImage: "bell.fill")
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .tint(Color.solPrimary)
-            .listRowBackground(Color.solCard)
-        } header: {
-            Text("Conectări")
-        } footer: {
-            Text("Datele tale rămân pe telefon. Solomon e privat.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-    }
+    // MARK: - Debug
 
-    @ViewBuilder
-    private var notificationsSection: some View {
-        Section {
-            navRow(icon: "shield.lefthalf.filled", iconColor: .solWarning, label: "Verificare spirală") {
-                showSpiralAlert = true
-            }
-        } header: {
-            Text("Sănătate financiară")
-        }
-    }
-
-    @ViewBuilder
-    private var subscriptionSection: some View {
-        Section {
-            Button {
-                Haptics.light()
-                openURL("https://apps.apple.com/account/subscriptions")
-            } label: {
-                HStack(spacing: SolSpacing.md) {
-                    Image(systemName: "crown.fill")
-                        .font(.body)
-                        .foregroundStyle(Color.solPrimary)
-                        .symbolRenderingMode(.hierarchical)
-                        .frame(width: 28)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(vm.userPlan)
-                            .font(.body)
-                            .foregroundStyle(Color.solForeground)
-                        Text(vm.subscriptionStatusLabel)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.footnote)
-                        .foregroundStyle(.tertiary)
+    #if DEBUG
+    private var debugCard: some View {
+        SolListCard {
+            SettingsRow(
+                icon: "wand.and.stars",
+                accent: .violet,
+                title: "Generează demo data",
+                kind: .chevron,
+                onTap: {
+                    Haptics.light()
+                    runDemoGenerate()
                 }
-            }
-            .listRowBackground(Color.solCard)
-        } header: {
-            Text("Abonament")
+            )
+            SolHairlineDivider()
+            SettingsRow(
+                icon: "trash.fill",
+                accent: .rose,
+                title: "Șterge toate datele",
+                titleColor: .solRoseExact,
+                kind: .chevron,
+                onTap: {
+                    Haptics.warning()
+                    runClearData()
+                }
+            )
+            SolHairlineDivider()
+            SettingsRow(
+                icon: "arrow.counterclockwise",
+                accent: .amber,
+                title: "Reset onboarding",
+                kind: .chevron,
+                onTap: {
+                    Haptics.warning()
+                    OnboardingState.resetForDebug()
+                    showDebugAlert = .onboardingReset
+                }
+            )
         }
     }
-
-    @ViewBuilder
-    private var aboutSection: some View {
-        Section {
-            navRow(icon: "cpu.fill", iconColor: .solCyan, label: "Modelul LLM") {
-                showModelDownload = true
-            }
-            navRow(icon: "info.circle.fill", iconColor: .secondary, label: "Despre Solomon", value: "v1.0.0") {
-                openURL("https://solomon.ro/despre")
-            }
-            navRow(icon: "lock.shield.fill", iconColor: .secondary, label: "Confidențialitate") {
-                openURL("https://solomon.ro/privacy")
-            }
-            navRow(icon: "doc.text.fill", iconColor: .secondary, label: "Termeni de utilizare") {
-                openURL("https://solomon.ro/terms")
-            }
-            Toggle(isOn: $vm.trainingOptIn) {
-                Label("Contribuie la training", systemImage: "brain.head.profile")
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .tint(Color.solPrimary)
-            .listRowBackground(Color.solCard)
-        } header: {
-            Text("Despre")
-        }
-    }
-
-    @ViewBuilder
-    private var debugSection: some View {
-        Section {
-            Button {
-                Haptics.light()
-                runDemoGenerate()
-            } label: {
-                Label("Generează demo data", systemImage: "wand.and.stars")
-            }
-            .listRowBackground(Color.solCard)
-
-            Button(role: .destructive) {
-                Haptics.warning()
-                runClearData()
-            } label: {
-                Label("Șterge toate datele", systemImage: "trash")
-            }
-            .listRowBackground(Color.solCard)
-
-            Button {
-                Haptics.warning()
-                OnboardingState.resetForDebug()
-                showDebugAlert = .onboardingReset
-            } label: {
-                Label("Reset onboarding", systemImage: "arrow.counterclockwise")
-            }
-            .listRowBackground(Color.solCard)
-        } header: {
-            Text("Debug")
-        }
-    }
+    #endif
 
     // MARK: - Helpers
 
-    @ViewBuilder
-    private func navRow(
-        icon: String,
-        iconColor: Color,
-        label: String,
-        value: String? = nil,
-        action: (() -> Void)? = nil
-    ) -> some View {
-        if let action {
-            Button {
-                Haptics.light()
-                action()
-            } label: {
-                HStack(spacing: SolSpacing.md) {
-                    Image(systemName: icon)
-                        .font(.body)
-                        .foregroundStyle(iconColor)
-                        .symbolRenderingMode(.hierarchical)
-                        .frame(width: 28)
-                    Text(label)
-                        .font(.body)
-                        .foregroundStyle(Color.solForeground)
-                    Spacer()
-                    if let value {
-                        Text(value)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    Image(systemName: "chevron.right")
-                        .font(.footnote)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            .listRowBackground(Color.solCard)
-        } else {
-            HStack(spacing: SolSpacing.md) {
-                Image(systemName: icon)
-                    .font(.body)
-                    .foregroundStyle(iconColor)
-                    .symbolRenderingMode(.hierarchical)
-                    .frame(width: 28)
-                Text(label)
-                    .font(.body)
-                    .foregroundStyle(Color.solForeground)
-                Spacer()
-                if let value {
-                    Text(value)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .listRowBackground(Color.solCard)
-        }
+    private var versionString: String {
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        return "v\(v) · build \(b)"
+    }
+
+    private func initials(from name: String) -> String {
+        let parts = name.split(separator: " ").prefix(2)
+        let letters = parts.compactMap { $0.first.map { String($0) } }.joined()
+        let result = letters.uppercased()
+        return result.isEmpty ? "S" : result
     }
 
     private func openURL(_ urlString: String) {
@@ -344,6 +434,136 @@ struct SettingsView: View {
     }
 }
 
+// MARK: - SettingsRow (custom row 1:1 cu .set-row din settings.html)
+
+private struct SettingsRow: View {
+    enum Accent {
+        case mint, blue, violet, amber, rose, gray
+
+        var color: Color {
+            switch self {
+            case .mint:   return .solMintExact
+            case .blue:   return .solBlueExact
+            case .violet: return .solVioletExact
+            case .amber:  return .solAmberExact
+            case .rose:   return .solRoseExact
+            case .gray:   return Color.white.opacity(0.7)
+            }
+        }
+
+        var iconBackground: AnyView {
+            switch self {
+            case .gray:
+                return AnyView(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.white.opacity(0.04))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        )
+                )
+            default:
+                let c = color
+                return AnyView(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [c.opacity(0.18), c.opacity(0.05)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(c.opacity(0.2), lineWidth: 1)
+                        )
+                )
+            }
+        }
+    }
+
+    enum Kind {
+        case toggle(isOn: Binding<Bool>)
+        case valueChevron(value: String)
+        case chevron
+        case value(value: String)
+        case none
+    }
+
+    let icon: String
+    let accent: Accent
+    let title: String
+    var titleColor: Color = .white
+    let kind: Kind
+    var onTap: (() -> Void)? = nil
+
+    var body: some View {
+        Button {
+            if case .toggle = kind { return }
+            if let onTap {
+                Haptics.light()
+                onTap()
+            }
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    accent.iconBackground
+                    Image(systemName: icon)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(accent.color)
+                }
+                .frame(width: 30, height: 30)
+
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(titleColor)
+
+                Spacer()
+
+                trailing
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(disableButton)
+    }
+
+    private var disableButton: Bool {
+        if case .toggle = kind { return true }
+        return onTap == nil
+    }
+
+    @ViewBuilder
+    private var trailing: some View {
+        switch kind {
+        case .toggle(let isOn):
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .tint(Color.solMintExact)
+                .scaleEffect(0.9)
+        case .valueChevron(let value):
+            Text(value)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.white.opacity(0.4))
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.3))
+        case .chevron:
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.3))
+        case .value(let value):
+            Text(value)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.white.opacity(0.4))
+        case .none:
+            EmptyView()
+        }
+    }
+}
+
 // MARK: - SettingsViewModel
 
 @Observable @MainActor
@@ -369,7 +589,6 @@ final class SettingsViewModel {
     var subscriptionStatusLabel: String {
         let cal = Calendar.current
         let now = Date()
-        // Găsim ziua de 15 a lunii viitoare (sau a celei curente dacă e după 15)
         let day = cal.component(.day, from: now)
         let renewMonth: Date
         if day <= 15 {
@@ -391,7 +610,7 @@ final class SettingsViewModel {
     }
 
     func configure(persistence: SolomonPersistenceController) {
-        guard userProfileRepo == nil else { return }  // evită re-configurare la fiecare tab switch
+        guard userProfileRepo == nil else { return }
         let ctx = persistence.container.viewContext
         self.userProfileRepo = CoreDataUserProfileRepository(context: ctx)
         load()

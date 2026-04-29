@@ -3,10 +3,18 @@ import SolomonCore
 import SolomonStorage
 import SolomonAnalytics
 
-// MARK: - GoalsListView
+// MARK: - GoalsListView (Claude Design v3)
 //
-// Lista obiectivelor financiare ale user-ului + buton "+" pentru add.
-// Fiecare goal: card cu progress bar + suma curentă/target + deadline.
+// Pixel-fidel cu `Solomon DS / screens/goals.html`:
+//   - MeshBackground (mint/blue/violet)
+//   - SolAppBar "SOLOMON · OBIECTIVE" + greeting "Pe drum" + "+" iconbtn
+//   - Hero card mint cu SolProgressRing 120pt (% mediu) + total saved/target + chips
+//   - InsightCard mint "SOLOMON · PROIECȚIE" cu CTA "Crește contribuția" / "Vezi proiecție"
+//   - Section header "OBIECTIVELE TALE · X active"
+//   - SolListCard cu goal-rows: icon colorat per kind + nume/deadline + chip + progress bar + meta
+//   - Buton dashed "+ Adaugă obiectiv nou"
+//
+// Business logic păstrat 1:1: GoalProgressReport, GoalProgress, CashFlowAnalyzer, sheet add/edit.
 
 struct GoalsListView: View {
 
@@ -20,38 +28,35 @@ struct GoalsListView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.solCanvas.ignoresSafeArea()
+                MeshBackground()
 
                 ScrollView {
                     VStack(spacing: SolSpacing.md) {
+                        // AppBar
+                        SolAppBar(
+                            brand: "SOLOMON · OBIECTIVE",
+                            greeting: greetingText
+                        ) {
+                            SolIconButton(systemName: "plus") {
+                                showAddGoal = true
+                            }
+                        }
+
                         if goalReports.isEmpty {
                             emptyState
                         } else {
-                            ForEach(goalReports, id: \.goal.id) { report in
-                                GoalCard(report: report) {
-                                    editingGoal = report.goal
-                                }
-                            }
+                            heroCard
+                            insightCard
+                            sectionHeader
+                            goalList
+                            addGoalButton
                         }
                     }
                     .padding(.horizontal, SolSpacing.screenHorizontal)
-                    .padding(.top, SolSpacing.lg)
                     .padding(.bottom, SolSpacing.hh)
                 }
             }
-            .navigationTitle("Obiective")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showAddGoal = true
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundStyle(LinearGradient.solHero)
-                    }
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showAddGoal, onDismiss: load) {
                 GoalEditView().solStandardSheet()
             }
@@ -62,28 +67,362 @@ struct GoalsListView: View {
         }
     }
 
+    // MARK: - Aggregate metrics
+
+    private var totalSaved: Int {
+        goalReports.reduce(0) { $0 + $1.goal.amountSaved.amount }
+    }
+
+    private var totalTarget: Int {
+        goalReports.reduce(0) { $0 + $1.goal.amountTarget.amount }
+    }
+
+    private var averageProgress: Double {
+        guard totalTarget > 0 else { return 0 }
+        return Double(totalSaved) / Double(totalTarget)
+    }
+
+    private var totalMonthlyRequired: Int {
+        goalReports.reduce(0) { $0 + $1.monthlyRequired.amount }
+    }
+
+    private var maxMonthsRemaining: Int {
+        goalReports.map { $0.monthsRemaining }.max() ?? 0
+    }
+
+    private var greetingText: String {
+        if goalReports.isEmpty { return "Începe" }
+        let onTrackCount = goalReports.filter { $0.feasibility == .easy || $0.feasibility == .onTrack }.count
+        if onTrackCount == goalReports.count { return "Pe drum" }
+        if onTrackCount == 0 { return "Reajustează" }
+        return "Aproape"
+    }
+
+    // MARK: - Hero
+
+    @ViewBuilder
+    private var heroCard: some View {
+        SolHeroCard(accent: .mint) {
+            HStack(alignment: .top, spacing: 18) {
+                SolProgressRing(
+                    progress: CGFloat(min(1.0, max(0.0, averageProgress))),
+                    label: "PROGRES",
+                    size: 120,
+                    lineWidth: 9,
+                    accent: .mint
+                )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    SolHeroLabel("ACUMULAT TOTAL")
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(formatNumber(totalSaved))
+                            .font(.system(size: 30, weight: .semibold))
+                            .foregroundStyle(Color.white)
+                            .tracking(-1)
+                            .monospacedDigit()
+                            .shadow(color: Color.solMintExact.opacity(0.18), radius: 30)
+                        Text("RON")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.4))
+                            .padding(.leading, 4)
+                    }
+                    .padding(.top, 2)
+                    Text("din \(formatNumber(totalTarget)) țintă")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.white.opacity(0.5))
+                        .padding(.top, 2)
+
+                    HStack(spacing: 6) {
+                        if totalMonthlyRequired > 0 {
+                            SolChip("+\(formatNumber(totalMonthlyRequired)) lună", kind: .mint)
+                        }
+                        if maxMonthsRemaining > 0 {
+                            SolChip("\(maxMonthsRemaining) luni", kind: .muted)
+                        }
+                    }
+                    .padding(.top, 14)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } badge: {
+            SolHeroBadge("\(goalReports.count) ACTIVE", accent: .mint)
+        }
+    }
+
+    // MARK: - Insight
+
+    @ViewBuilder
+    private var insightCard: some View {
+        SolInsightCard(
+            icon: "clock",
+            label: "SOLOMON · PROIECȚIE",
+            timestamp: "recalc azi",
+            accent: .mint
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(projectionText)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.white.opacity(0.75))
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    SolPrimaryButton("Crește contribuția", accent: .mint) {
+                        if let first = goalReports.first {
+                            editingGoal = first.goal
+                        }
+                    }
+                    SolSecondaryButton("Vezi proiecție") { }
+                }
+            }
+        }
+    }
+
+    private var projectionText: String {
+        if let primary = goalReports.first {
+            let monthly = max(1, primary.monthlyRequired.amount)
+            let monthsLabel = primary.monthsRemaining > 0 ? "\(primary.monthsRemaining) luni" : "termen scurt"
+            return "Dacă ții ritmul de +\(formatNumber(monthly)) RON/lună, ajungi la \(primary.goal.kind.displayNameRO) în \(monthsLabel)."
+        }
+        return "Setează o contribuție lunară și Solomon proiectează când ajungi la fiecare obiectiv."
+    }
+
+    // MARK: - Section header
+
+    @ViewBuilder
+    private var sectionHeader: some View {
+        SolSectionHeaderRow("OBIECTIVELE TALE", meta: "\(goalReports.count) active")
+            .padding(.top, SolSpacing.xs)
+    }
+
+    // MARK: - List
+
+    @ViewBuilder
+    private var goalList: some View {
+        SolListCard {
+            ForEach(Array(goalReports.enumerated()), id: \.element.goal.id) { index, report in
+                if index > 0 { SolHairlineDivider() }
+                goalRow(report: report)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func goalRow(report: GoalProgressReport) -> some View {
+        Button {
+            Haptics.light()
+            editingGoal = report.goal
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                // Head
+                HStack(alignment: .center, spacing: 12) {
+                    goalIcon(for: report.goal.kind)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(report.goal.destination ?? report.goal.kind.displayNameRO)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(Color.white)
+                        Text(deadlineSubtitle(for: report))
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.white.opacity(0.4))
+                    }
+
+                    Spacer()
+
+                    let chip = chipFor(report.feasibility)
+                    SolChip(chip.label, kind: chip.kind)
+                }
+
+                // Progress
+                SolLinearProgress(
+                    progress: CGFloat(min(1.0, max(0.0, report.progressFraction))),
+                    accent: accentFor(report.goal.kind),
+                    height: 6,
+                    glow: true
+                )
+
+                // Meta
+                HStack {
+                    HStack(spacing: 0) {
+                        Text(formatNumber(report.goal.amountSaved.amount))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.white)
+                            .monospacedDigit()
+                        Text(" / \(formatNumber(report.goal.amountTarget.amount)) RON")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.white.opacity(0.6))
+                            .monospacedDigit()
+                    }
+                    Spacer()
+                    if report.monthlyRequired.amount > 0 {
+                        Text("+\(formatNumber(report.monthlyRequired.amount))/lună")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.white.opacity(0.4))
+                            .monospacedDigit()
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func goalIcon(for kind: GoalKind) -> some View {
+        let accent = accentFor(kind)
+        ZStack {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(accent.iconGradient)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .stroke(accent.color.opacity(0.25), lineWidth: 1)
+                )
+            Image(systemName: iconFor(kind))
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(accent.color)
+        }
+        .frame(width: 38, height: 38)
+    }
+
+    // MARK: - Add button
+
+    @ViewBuilder
+    private var addGoalButton: some View {
+        Button {
+            Haptics.light()
+            showAddGoal = true
+        } label: {
+            Text("+ Adaugă obiectiv nou")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.6))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white.opacity(0.03))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(
+                            Color.white.opacity(0.15),
+                            style: StrokeStyle(lineWidth: 1, dash: [4, 3])
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .padding(.top, SolSpacing.xs)
+    }
+
+    // MARK: - Empty state
+
     @ViewBuilder
     private var emptyState: some View {
         VStack(spacing: SolSpacing.md) {
-            IconContainer(systemName: "target", variant: .neon, size: 64, iconSize: 26)
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(SolAccent.mint.iconGradient)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Color.solMintExact.opacity(0.25), lineWidth: 1)
+                    )
+                Image(systemName: "target")
+                    .font(.system(size: 26, weight: .medium))
+                    .foregroundStyle(Color.solMintExact)
+            }
+            .frame(width: 64, height: 64)
+            .padding(.top, SolSpacing.lg)
+
             Text("Niciun obiectiv încă")
-                .font(.solH3)
-                .foregroundStyle(Color.solForeground)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(Color.white)
+
             Text("Adaugă primul tău obiectiv financiar și Solomon te ajută să ajungi acolo.")
-                .font(.solBody)
-                .foregroundStyle(Color.solMuted)
+                .font(.system(size: 13))
+                .foregroundStyle(Color.white.opacity(0.5))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, SolSpacing.lg)
+                .lineSpacing(2)
 
-            SolomonButton("Adaugă obiectiv", icon: "plus") {
+            SolPrimaryButton("Adaugă primul obiectiv", accent: .mint, fullWidth: true) {
                 showAddGoal = true
             }
             .padding(.top, SolSpacing.md)
+            .padding(.horizontal, SolSpacing.xl)
         }
         .padding(SolSpacing.xl)
         .frame(maxWidth: .infinity, minHeight: 360)
-        .solCard()
+        .background(
+            LinearGradient(
+                colors: [Color.white.opacity(0.035), Color.white.opacity(0.015)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .background(.ultraThinMaterial.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.07), lineWidth: 1)
+        )
     }
+
+    // MARK: - Helpers
+
+    private func accentFor(_ kind: GoalKind) -> SolAccent {
+        switch kind {
+        case .emergencyFund:    return .mint
+        case .vacation:         return .blue
+        case .car, .house:      return .violet
+        case .debtPayoff:       return .rose
+        case .custom:           return .mint
+        }
+    }
+
+    private func iconFor(_ kind: GoalKind) -> String {
+        switch kind {
+        case .vacation:         return "airplane"
+        case .car:              return "car.fill"
+        case .house:            return "house.fill"
+        case .emergencyFund:    return "shield.fill"
+        case .debtPayoff:       return "creditcard.fill"
+        case .custom:           return "target"
+        }
+    }
+
+    private func chipFor(_ feasibility: GoalFeasibility) -> (label: String, kind: SolChip.Kind) {
+        switch feasibility {
+        case .easy, .onTrack:               return ("on track", .mint)
+        case .challengingButPossible:       return ("restant",  .warn)
+        case .unrealistic:                  return ("blocat",   .rose)
+        }
+    }
+
+    private func deadlineSubtitle(for report: GoalProgressReport) -> String {
+        let monthYear = formatMonthYear(report.goal.deadline)
+        if report.monthsRemaining > 0 {
+            return "\(monthYear) · \(report.monthsRemaining) luni"
+        }
+        return monthYear
+    }
+
+    private func formatMonthYear(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "MMM yyyy"
+        f.locale = Locale(identifier: "ro_RO")
+        return f.string(from: date)
+    }
+
+    private func formatNumber(_ value: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = "."
+        f.locale = Locale(identifier: "ro_RO")
+        return f.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+
+    // MARK: - Data
 
     private func load() {
         let ctx = SolomonPersistenceController.shared.container.viewContext
@@ -98,139 +437,6 @@ struct GoalsListView: View {
 
         // Generează GoalProgressReport per goal
         goalReports = goals.map { goalProgress.evaluate(goal: $0, monthlyCurrentSavingPace: pace) }
-    }
-}
-
-// MARK: - GoalCard
-
-struct GoalCard: View {
-    let report: GoalProgressReport
-    let onTap: () -> Void
-
-    private var goal: Goal { report.goal }
-
-    var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: SolSpacing.md) {
-                HStack(alignment: .top, spacing: SolSpacing.md) {
-                    IconContainer(
-                        systemName: iconFor(goal.kind),
-                        variant: variantFor(goal.kind),
-                        size: 44,
-                        iconSize: 18
-                    )
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(goal.destination ?? goal.kind.displayNameRO)
-                            .font(.solH3)
-                            .foregroundStyle(Color.solForeground)
-                        Text(goal.kind.displayNameRO)
-                            .font(.solCaption)
-                            .foregroundStyle(Color.solMuted)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color.solMuted)
-                }
-
-                NeonProgressBar(
-                    progress: report.progressFraction,
-                    variant: variantForFeasibility,
-                    label: "\(goal.amountSaved.amount) / \(goal.amountTarget.amount) RON",
-                    trailing: "\(Int(report.progressFraction * 100))%"
-                )
-
-                // Feasibility info
-                HStack(spacing: SolSpacing.xs) {
-                    Image(systemName: feasibilityIcon)
-                        .font(.system(size: 11))
-                        .foregroundStyle(feasibilityColor)
-                    Text(report.feasibility.displayNameRO)
-                        .font(.solCaption)
-                        .foregroundStyle(feasibilityColor)
-                    Spacer()
-                    if report.monthlyRequired.amount > 0 {
-                        Text("\(report.monthlyRequired.amount) RON/lună necesar")
-                            .font(.solCaption)
-                            .foregroundStyle(Color.solMuted)
-                    }
-                }
-
-                // Deadline info
-                HStack {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.solMuted)
-                    Text("Deadline: \(formatDate(goal.deadline))")
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solMuted)
-                    Spacer()
-                    if report.monthsRemaining > 0 {
-                        StatusBadge(
-                            title: "\(report.monthsRemaining) luni",
-                            kind: report.monthsRemaining <= 3 ? .warning : .neutral
-                        )
-                    }
-                }
-            }
-            .padding(SolSpacing.cardStandard)
-            .solCard()
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var variantForFeasibility: NeonProgressBar.Variant {
-        switch report.feasibility {
-        case .easy, .onTrack:               return .success
-        case .challengingButPossible:       return .warning
-        case .unrealistic:                  return .danger
-        }
-    }
-
-    private var feasibilityIcon: String {
-        switch report.feasibility {
-        case .easy:                         return "hare.fill"
-        case .onTrack:                      return "checkmark.circle.fill"
-        case .challengingButPossible:       return "exclamationmark.triangle.fill"
-        case .unrealistic:                  return "xmark.octagon.fill"
-        }
-    }
-
-    private var feasibilityColor: Color {
-        switch report.feasibility {
-        case .easy, .onTrack:               return .solPrimary
-        case .challengingButPossible:       return .solWarning
-        case .unrealistic:                  return .solDestructive
-        }
-    }
-
-    private func iconFor(_ kind: GoalKind) -> String {
-        switch kind {
-        case .vacation:      return "airplane"
-        case .car:           return "car.fill"
-        case .house:         return "house.fill"
-        case .emergencyFund: return "shield.fill"
-        case .debtPayoff:    return "creditcard.fill"
-        case .custom:        return "target"
-        }
-    }
-
-    private func variantFor(_ kind: GoalKind) -> IconContainer.Variant {
-        switch kind {
-        case .vacation:      return .cyan
-        case .car:           return .neon
-        case .house:         return .cyan
-        case .emergencyFund: return .warn
-        case .debtPayoff:    return .danger
-        case .custom:        return .tinted
-        }
-    }
-
-    private func formatDate(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "d MMM yyyy"
-        f.locale = Locale(identifier: "ro_RO")
-        return f.string(from: date)
     }
 }
 
