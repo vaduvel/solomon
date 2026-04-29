@@ -399,7 +399,9 @@ struct CanIAffordSheet: View {
 
         do {
             let builder = CanIAffordBuilder()
-            let output = try await builder.build(context, using: TemplateLLMProvider())
+            // Folosim provider-ul real (MLX dacă e descărcat, Template fallback)
+            let llm = ModelDownloadService.shared.makeLLMProvider()
+            let output = try await builder.build(context, using: llm)
             llmResponse = output.llmResponse
         } catch {
             llmResponse = nil

@@ -109,7 +109,7 @@ final class BackgroundTaskService {
         scheduleRefresh()
 
         let snapshot = buildSnapshot()
-        let engine = MomentEngine()
+        let engine = MomentEngine(llm: ModelDownloadService.shared.makeLLMProvider())
         let selected = engine.selectedType(snapshot: snapshot)
 
         // Trimite push doar pentru momente acționabile (nu Wow/generic)
@@ -126,7 +126,7 @@ final class BackgroundTaskService {
         scheduleWeekly()
 
         let snapshot = buildSnapshot()
-        let engine = MomentEngine()
+        let engine = MomentEngine(llm: ModelDownloadService.shared.makeLLMProvider())
         let selected = engine.selectedType(snapshot: snapshot)
 
         if selected == .weeklySummary {
