@@ -2,11 +2,11 @@ import SwiftUI
 import SolomonCore
 import SolomonStorage
 
-// MARK: - TodayView (Tab 1 — v3 Editorial Premium)
+// MARK: - TodayView (Tab 1 — Acasă)
 //
-// Design: Solomon DS · TodayView.v3.html (Claude Design)
-// Layout: ambient mesh background → hero glass card → mint pill CTA →
-//         editorial numbered sections (01 Solomon spune, 02 Obiectiv, 03 Istoric)
+// Transpunere 1:1 din Solomon DS / wallet.html (Claude Design)
+// Layout: MeshBackground → AppBar → HeroCard (Safe to Spend) →
+//         InsightCard (Solomon spune) → Stats grid → CONTURI list
 
 struct TodayView: View {
 
@@ -19,94 +19,65 @@ struct TodayView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
-                // Ambient mesh gradient — teal top-left, blue bottom-right (v3 design)
-                ambientBackground
-                    .ignoresSafeArea()
+                MeshBackground(
+                    topLeftAccent: .mint,
+                    midRightAccent: .blue,
+                    bottomLeftAccent: .violet
+                )
 
                 ScrollView {
                     VStack(spacing: SolSpacing.base) {
 
-                        // Greeting (bună dimineața / Andrei)
-                        greetingRow
-                            .padding(.top, SolSpacing.xs)
+                        // ── App bar (brand + greeting + actions)
+                        SolAppBar(
+                            brand: "SOLOMON",
+                            greeting: vm.userName.isEmpty ? "Bună" : "Bună, \(vm.userName)"
+                        ) {
+                            SolIconButton(systemName: "magnifyingglass") {
+                                showCanIAfford = true
+                            }
+                            SolIconButton(
+                                systemName: "bell",
+                                hasDot: vm.hasUnreadAlert
+                            ) {
+                                showAlerts = true
+                                vm.hasUnreadAlert = false
+                            }
+                        }
 
-                        // Hero — Safe to Spend (editorial glass card)
+                        // ── Hero — Safe to Spend
                         heroCard
 
-                        // Tight budget banner (dacă e cazul)
-                        if vm.isBudgetTight {
-                            tightBudgetBanner
-                        }
-
-                        // CTA — Pot să-mi permit?
-                        canIAffordCTA
-
-                        // ─── 01 SOLOMON SPUNE ───────────────────────────
+                        // ── Insight — Solomon spune (current moment)
                         if vm.isLoadingMoment {
-                            editorialSectionHeader(num: "01", label: "SOLOMON SPUNE", trailing: "")
-                            momentLoadingPlaceholder
+                            insightLoadingPlaceholder
                         } else if let moment = vm.currentMoment {
-                            editorialSectionHeader(
-                                num: "01",
-                                label: "SOLOMON SPUNE",
-                                trailing: moment.timeAgoString
-                            )
-                            MomentCard(moment: moment)
-                                .padding(.horizontal, SolSpacing.base)
+                            momentInsightCard(moment: moment)
                         } else {
-                            editorialSectionHeader(num: "01", label: "SOLOMON SPUNE", trailing: "")
-                            emptyMomentsState
+                            emptyInsightCard
                         }
 
-                        // ─── 02 OBIECTIV ACTIV (dacă există) ─────────────
-                        // (rezervat pentru viitor — GoalsEngine integration)
+                        // ── Stats grid (2x2) — Următoarea plată + Pattern
+                        statsGrid
 
-                        // ─── 03 ISTORIC ─────────────────────────────────
+                        // ── Section: CONTURI
+                        SolSectionHeaderRow("CONTURI", meta: "1 activ")
+                        accountsList
+
+                        // ── Recent moments rail
                         if vm.recentMoments.count > 1 {
-                            editorialSectionHeader(num: "02", label: "ISTORIC", trailing: "Toate")
-                            historicRail
+                            SolSectionHeaderRow("ISTORIC", meta: "ultimele")
+                            recentMomentsRail
                         }
 
                         Spacer(minLength: SolSpacing.xxxl)
                     }
-                    .padding(.top, SolSpacing.base)
+                    .padding(.horizontal, SolSpacing.xl)
+                    .padding(.top, SolSpacing.sm)
                 }
+                .scrollContentBackground(.hidden)
             }
-            .background(Color.solCanvas)
-            .navigationTitle("Solomon")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        Haptics.light()
-                        showManualEntry = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.body.weight(.medium))
-                            .foregroundStyle(Color.solForeground)
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Haptics.light()
-                        showAlerts = true
-                        vm.hasUnreadAlert = false
-                    } label: {
-                        ZStack(alignment: .topTrailing) {
-                            Image(systemName: "bell")
-                                .font(.body)
-                                .foregroundStyle(Color.solForeground)
-                            if vm.hasUnreadAlert {
-                                Circle()
-                                    .fill(Color.solPrimary)
-                                    .frame(width: 8, height: 8)
-                                    .shadow(color: Color.solPrimary, radius: 4)
-                                    .offset(x: 4, y: -4)
-                            }
-                        }
-                    }
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .ingestionToast(transaction: ingestionBinding)
             .sheet(isPresented: $showManualEntry) {
                 ManualTransactionView().solStandardSheet()
@@ -125,404 +96,281 @@ struct TodayView: View {
         }
     }
 
-    // MARK: - Ambient background (mesh gradient v3)
-
-    @ViewBuilder
-    private var ambientBackground: some View {
-        ZStack {
-            Color.solCanvas
-            // Teal top-left
-            RadialGradient(
-                colors: [Color.solPrimary.opacity(0.08), Color.clear],
-                center: .init(x: 0.08, y: 0.06),
-                startRadius: 0,
-                endRadius: 260
-            )
-            // Blue bottom-right
-            RadialGradient(
-                colors: [Color.blue.opacity(0.05), Color.clear],
-                center: .init(x: 0.92, y: 0.94),
-                startRadius: 0,
-                endRadius: 240
-            )
-        }
-    }
-
-    // MARK: - Greeting
-
-    @ViewBuilder
-    private var greetingRow: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(vm.greetingText)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.solMuted)
-                .textCase(.uppercase)
-                .tracking(1.5)
-            if !vm.userName.isEmpty {
-                Text(vm.userName)
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(Color.solForeground)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, SolSpacing.base)
-    }
-
-    // MARK: - Hero Card (v3 editorial glass)
+    // MARK: - Hero Card
 
     @ViewBuilder
     private var heroCard: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        SolHeroCard(accent: vm.isBudgetTight ? .amber : .mint) {
+            VStack(alignment: .leading, spacing: 0) {
+                SolHeroLabel("DISPONIBIL LIBER · \(vm.daysUntilPayday) ZILE")
+                    .padding(.top, SolSpacing.xs)
 
-            // ── Eyebrow row ──
-            HStack(spacing: SolSpacing.xs) {
-                // Live dot pulsate
-                Circle()
-                    .fill(Color.solPrimary)
-                    .frame(width: 6, height: 6)
-                    .shadow(color: Color.solPrimary, radius: 4)
-                Text("SAFE TO SPEND")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(Color.solPrimary)
-                    .tracking(1.8)
-                Spacer()
-                // Status pill
-                Text(vm.safeToSpendStatus)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(vm.isBudgetTight ? Color.solWarning : Color.solPrimary)
-                    .tracking(1.0)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(
-                        (vm.isBudgetTight ? Color.solWarning : Color.solPrimary).opacity(0.10)
-                    )
-                    .overlay(
-                        Capsule()
-                            .stroke(
-                                (vm.isBudgetTight ? Color.solWarning : Color.solPrimary).opacity(0.40),
-                                lineWidth: 0.5
-                            )
-                    )
-                    .clipShape(Capsule())
+                SolHeroAmount(
+                    amount: vm.safeToSpendAmountFormatted,
+                    decimals: ",00",
+                    currency: "RON",
+                    accent: vm.isBudgetTight ? .amber : .mint
+                )
+                .padding(.top, 6)
+
+                HStack(spacing: 8) {
+                    Text("≈ \(vm.perDayRON) RON/zi")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.white.opacity(0.55))
+                    Circle().fill(Color.white.opacity(0.25)).frame(width: 3, height: 3)
+                    Text("până \(vm.paydayDateFormatted)")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.white.opacity(0.55))
+                }
+                .padding(.top, 6)
+                .padding(.bottom, 18)
+
+                // Allocation bar (Obligații / Savings / Buffer / Rest)
+                SolAllocationBar(
+                    segments: allocationSegments,
+                    height: 7
+                )
+                .padding(.bottom, 10)
+
+                // Legend
+                HStack(spacing: 0) {
+                    legendItem(color: .solMintExact, label: "Obligații", value: 1500)
+                    Spacer()
+                    legendItem(color: .solBlueExact, label: "Liber", value: vm.safeToSpendRON)
+                }
             }
-            .padding(.bottom, SolSpacing.lg)
-
-            // ── Hero number ──
-            VStack(alignment: .leading, spacing: 4) {
-                Text(vm.safeToSpendAmountFormatted)
-                    .font(.solHeroBig)
-                    .foregroundStyle(LinearGradient.solHero)
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-
-                Text("RON · DISPONIBIL")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color.solPrimary.opacity(0.85))
-                    .tracking(1.4)
-            }
-
-            // ── Caption ──
-            Text(heroCaption)
-                .font(.system(size: 13))
-                .foregroundStyle(Color.solMuted)
-                .lineSpacing(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, SolSpacing.md)
-                .padding(.bottom, SolSpacing.lg)
-
-            // ── Meta grid ── (hairline separator top)
-            Divider()
-                .background(Color.white.opacity(0.08))
-
-            HStack(spacing: 0) {
-                heroMetaCell(key: "PER ZI",
-                             value: "\(vm.perDayRON) RON",
-                             isMint: true)
-                Spacer()
-                heroMetaCell(key: "CHELTUIT",
-                             value: vm.formatRON(vm.spentThisMonthRON),
-                             isMint: false)
-                Spacer()
-                heroMetaCell(key: "SALARIU",
-                             value: vm.paydayDateFormatted,
-                             isMint: false)
-            }
-            .padding(.top, SolSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } badge: {
+            SolHeroBadge("SAFE TO SPEND", accent: vm.isBudgetTight ? .amber : .mint)
         }
-        .padding(SolSpacing.xl)
-        .solGlassCard()
-        .overlay(
-            // Mint border hairline
-            RoundedRectangle(cornerRadius: SolRadius.xxl, style: .continuous)
-                .stroke(Color.solPrimary.opacity(0.25), lineWidth: 0.5)
-        )
-        .overlay(alignment: .topLeading) {
-            // Corner highlight glow (top-left mint radial)
-            RadialGradient(
-                colors: [Color.solPrimary.opacity(0.35), Color.clear],
-                center: .topLeading,
-                startRadius: 0,
-                endRadius: 140
+    }
+
+    /// Calculează segmentele alocației pe baza datelor din ViewModel.
+    private var allocationSegments: [SolAllocationBar.Segment] {
+        let total = max(1, vm.safeToSpendRON + vm.spentThisMonthRON + 1500)
+        return [
+            .init(
+                fraction: CGFloat(1500) / CGFloat(total),
+                gradient: SolAccent.mint.primaryButtonGradient,
+                glowColor: .solMintExact.opacity(0.4)
+            ),
+            .init(
+                fraction: CGFloat(vm.spentThisMonthRON) / CGFloat(total),
+                gradient: SolAccent.amber.primaryButtonGradient,
+                glowColor: nil
+            ),
+            .init(
+                fraction: CGFloat(vm.safeToSpendRON) / CGFloat(total),
+                gradient: SolAccent.blue.primaryButtonGradient,
+                glowColor: nil
             )
-            .blur(radius: 20)
-            .clipShape(RoundedRectangle(cornerRadius: SolRadius.xxl, style: .continuous))
-            .allowsHitTesting(false)
-        }
-        .shadow(color: Color.black.opacity(0.35), radius: 16, x: 0, y: 8)
-        .padding(.horizontal, SolSpacing.base)
+        ]
     }
 
     @ViewBuilder
-    private func heroMetaCell(key: String, value: String, isMint: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(key)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(Color.solMuted.opacity(0.7))
-                .tracking(1.4)
-            Text(value)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(isMint ? Color.solPrimary : Color.solForeground)
+    private func legendItem(color: Color, label: String, value: Int) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 5, height: 5)
+            Text("\(label) \(value)")
+                .font(.system(size: 11))
+                .foregroundStyle(Color.white.opacity(0.5))
                 .monospacedDigit()
         }
     }
 
-    private var heroCaption: String {
-        if vm.daysUntilPayday > 0 {
-            return "Solomon a calculat după ce a scăzut obligațiile rămase și o rezervă pentru cele \(vm.daysUntilPayday) zile până la salariul următor."
-        } else {
-            return "Solomon calculează pe baza obligațiilor rămase din luna curentă."
-        }
-    }
-
-    // MARK: - Tight budget banner
+    // MARK: - Insight (current moment)
 
     @ViewBuilder
-    private var tightBudgetBanner: some View {
-        HStack(spacing: SolSpacing.sm) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(Color.solWarning)
-                .font(.subheadline)
-            Text("Buget strâns — atenție la cheltuielile mici")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color.solWarning)
-            Spacer()
-        }
-        .padding(.horizontal, SolSpacing.base)
-        .padding(.vertical, SolSpacing.md)
-        .background(Color.solWarning.opacity(0.12))
-        .clipShape(RoundedRectangle(cornerRadius: SolRadius.lg, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: SolRadius.lg, style: .continuous)
-                .stroke(Color.solWarning.opacity(0.30), lineWidth: 1)
-        )
-        .padding(.horizontal, SolSpacing.base)
-    }
+    private func momentInsightCard(moment: DisplayMoment) -> some View {
+        SolInsightCard(
+            icon: moment.systemIconName,
+            label: "SOLOMON · INSIGHT",
+            timestamp: moment.timeAgoString,
+            accent: accentFor(moment: moment)
+        ) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(moment.llmResponse)
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.white.opacity(0.85))
+                    .lineSpacing(2)
+                    .lineLimit(4)
 
-    // MARK: - CTA (pill mint cu blade glow)
-
-    @ViewBuilder
-    private var canIAffordCTA: some View {
-        Button {
-            Haptics.medium()
-            showCanIAfford = true
-        } label: {
-            HStack(spacing: SolSpacing.md) {
-                // Icon bubble — glass inner
-                ZStack {
-                    Circle()
-                        .fill(Color.black.opacity(0.20))
-                        .frame(width: 36, height: 36)
-                        .overlay(
-                            Circle().stroke(Color.white.opacity(0.40), lineWidth: 0.5)
-                        )
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(Color.solCanvas)
-                }
-
-                Text("Pot să-mi permit?")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Color.solCanvas)
-
-                Spacer()
-
-                // Arrow circle
-                ZStack {
-                    Circle()
-                        .fill(Color.black.opacity(0.18))
-                        .frame(width: 30, height: 30)
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color.solCanvas)
+                HStack(spacing: 8) {
+                    SolPrimaryButton("Vezi audit", accent: .mint) {
+                        showAlerts = true
+                    }
+                    SolSecondaryButton("Mai târziu") {}
                 }
             }
-            .padding(.horizontal, SolSpacing.base)
-            .frame(height: SolSpacing.hh)
-            .background(LinearGradient.solPrimaryCTA)
-            .clipShape(Capsule())
-            .shadow(color: Color.solPrimary.opacity(0.40), radius: 20, x: 0, y: 8)
-            .shadow(color: Color.solPrimary.opacity(0.20), radius: 40, x: 0, y: 0)
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, SolSpacing.base)
     }
 
-    // MARK: - Editorial section header (01 · LABEL · trailing)
+    private func accentFor(moment: DisplayMoment) -> SolAccent {
+        switch moment.momentTypeRaw {
+        case "spiral_alert":         return .rose
+        case "upcoming_obligation":  return .amber
+        case "can_i_afford":         return .blue
+        default:                     return .mint
+        }
+    }
 
     @ViewBuilder
-    private func editorialSectionHeader(num: String, label: String, trailing: String) -> some View {
-        HStack(alignment: .center, spacing: SolSpacing.sm) {
-            // Numbered badge
-            Text(num)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(Color.solPrimary)
-                .tracking(0.8)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(Color.solPrimary.opacity(0.08))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(Color.solPrimary.opacity(0.22), lineWidth: 0.5)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+    private var insightLoadingPlaceholder: some View {
+        SolInsightCard(
+            icon: "sparkles",
+            label: "SOLOMON · ANALIZEAZĂ",
+            timestamp: nil,
+            accent: .mint
+        ) {
+            HStack(spacing: 10) {
+                ProgressView().tint(Color.solMintExact)
+                Text("Caut tipare în datele tale…")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.white.opacity(0.7))
+            }
+            .padding(.vertical, 4)
+        }
+    }
 
-            Text(label)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(Color.solForeground)
-                .tracking(1.8)
+    @ViewBuilder
+    private var emptyInsightCard: some View {
+        SolInsightCard(
+            icon: "sparkles",
+            label: "SOLOMON · INSIGHT",
+            timestamp: nil,
+            accent: .mint
+        ) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Solomon ascultă, dar are nevoie de date. Adaugă manual prima ta tranzacție sau configurează Shortcut-ul.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.white.opacity(0.85))
+                    .lineSpacing(2)
 
-            Spacer()
-
-            if !trailing.isEmpty {
-                Text(trailing)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color.solMuted)
-                    .tracking(0.4)
+                HStack(spacing: 8) {
+                    SolPrimaryButton("Adaugă tranzacție") {
+                        showManualEntry = true
+                    }
+                }
             }
         }
-        .padding(.horizontal, SolSpacing.base)
-        .padding(.top, SolSpacing.sm)
-        .padding(.bottom, SolSpacing.xs)
     }
 
-    // MARK: - Moment loading
+    // MARK: - Stats Grid (2x2)
 
     @ViewBuilder
-    private var momentLoadingPlaceholder: some View {
-        HStack(spacing: SolSpacing.sm) {
-            ProgressView()
-                .tint(Color.solPrimary)
-            Text("Analizez datele tale…")
-                .font(.subheadline)
-                .foregroundStyle(Color.solMuted)
+    private var statsGrid: some View {
+        HStack(spacing: 10) {
+            SolStatCard(
+                label: "URM. PLATĂ",
+                name: "Următoarea",
+                value: "\(vm.formatRON(1500))",
+                meta: vm.daysUntilPayday > 3 ? "în \(vm.daysUntilPayday) zile" : "în curând",
+                metaAccent: .amber,
+                icon: "calendar",
+                iconAccent: .blue
+            )
+
+            SolStatCard(
+                label: "CHELTUIT",
+                name: "luna asta",
+                value: "\(vm.formatRON(vm.spentThisMonthRON))",
+                meta: vm.isBudgetTight ? "buget strâns" : "în limită",
+                metaAccent: vm.isBudgetTight ? .rose : .mint,
+                icon: "chart.line.uptrend.xyaxis",
+                iconAccent: .amber
+            )
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 100)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: SolRadius.xl, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: SolRadius.xl, style: .continuous)
-                .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
-        )
-        .padding(.horizontal, SolSpacing.base)
     }
 
-    // MARK: - Empty moments state
+    // MARK: - Accounts list
 
     @ViewBuilder
-    private var emptyMomentsState: some View {
-        VStack(spacing: SolSpacing.md) {
-            Image(systemName: "sparkles")
-                .font(.title2)
-                .foregroundStyle(Color.solPrimary)
-                .symbolRenderingMode(.hierarchical)
-
-            Text("Solomon ascultă, dar are nevoie de date.")
-                .font(.headline)
-                .foregroundStyle(Color.solForeground)
-                .multilineTextAlignment(.center)
-
-            Text("Adaugă manual prima ta tranzacție sau configurează Shortcut-ul ca să primesc automat notificările bancare. După câteva intrări, încep să-ți spun observații utile.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button {
-                Haptics.light()
-                showManualEntry = true
-            } label: {
-                Label("Adaugă tranzacție", systemImage: "plus.circle.fill")
-                    .font(.footnote.weight(.semibold))
-                    .padding(.horizontal, SolSpacing.base)
-                    .padding(.vertical, SolSpacing.sm)
-                    .foregroundStyle(Color.solPrimary)
-                    .background(Color.solPrimary.opacity(0.12), in: Capsule())
+    private var accountsList: some View {
+        SolListCard {
+            SolListRow(
+                title: "Solomon Wallet",
+                subtitle: "estimat · \(vm.formatRON(vm.safeToSpendRON + vm.spentThisMonthRON))",
+                onTap: {}
+            ) {
+                SolBrandLogo(.cash, size: 38)
+            } trailing: {
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(vm.safeToSpendAmountFormatted)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .monospacedDigit()
+                        .tracking(-0.3)
+                    Text("RON")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.white.opacity(0.35))
+                }
             }
-            .buttonStyle(.plain)
-            .padding(.top, SolSpacing.xs)
         }
-        .frame(maxWidth: .infinity)
-        .padding(SolSpacing.xl)
-        .solAIInsightCard()
-        .padding(.horizontal, SolSpacing.base)
     }
 
-    // MARK: - Historic rail (horizontal scroll)
+    // MARK: - Recent moments rail (horizontal)
 
     @ViewBuilder
-    private var historicRail: some View {
+    private var recentMomentsRail: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: SolSpacing.sm) {
+            HStack(spacing: 10) {
                 ForEach(vm.recentMoments.dropFirst()) { moment in
                     historicCard(moment: moment)
                 }
             }
-            .padding(.horizontal, SolSpacing.base)
-            .padding(.vertical, SolSpacing.xs)
+            .padding(.vertical, 4)
         }
     }
 
     @ViewBuilder
     private func historicCard(moment: DisplayMoment) -> some View {
-        VStack(alignment: .leading, spacing: SolSpacing.sm) {
-            // Head — icon + when
-            HStack(spacing: SolSpacing.sm) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(moment.accentColor.opacity(0.18))
-                        .frame(width: 26, height: 26)
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(accentFor(moment: moment).iconGradient)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 7)
-                                .stroke(moment.accentColor.opacity(0.30), lineWidth: 0.5)
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .stroke(accentFor(moment: moment).color.opacity(0.3), lineWidth: 1)
                         )
                     Image(systemName: moment.systemIconName)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(moment.accentColor)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(accentFor(moment: moment).color)
                 }
-                Text(moment.timeAgoString)
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(Color.solMuted)
+                .frame(width: 28, height: 28)
+
+                Text(moment.timeAgoString.uppercased())
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.4))
                     .tracking(1.2)
-                    .textCase(.uppercase)
+                Spacer()
             }
 
             Text(moment.title)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(Color.solForeground)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.white)
                 .lineLimit(1)
 
             Text(moment.llmResponse)
                 .font(.system(size: 12))
-                .foregroundStyle(Color.solMuted)
+                .foregroundStyle(Color.white.opacity(0.55))
                 .lineLimit(3)
                 .lineSpacing(1.5)
         }
-        .padding(SolSpacing.md)
+        .padding(14)
         .frame(width: 220, height: 156, alignment: .topLeading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: SolRadius.lg, style: .continuous))
+        .background(
+            LinearGradient(
+                colors: [Color.white.opacity(0.035), Color.white.opacity(0.015)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .background(.ultraThinMaterial.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: SolRadius.lg, style: .continuous)
-                .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.07), lineWidth: 1)
         )
     }
 
