@@ -13,6 +13,7 @@ import SolomonStorage
 struct OnboardingContainerView: View {
 
     @State private var state = OnboardingState()
+    @State private var saveError: String?
 
     let onFinish: () -> Void
 
@@ -40,6 +41,21 @@ struct OnboardingContainerView: View {
         }
         .preferredColorScheme(.dark)
         .environment(state)
+        .alert("Salvarea profilului a eșuat", isPresented: errorAlertBinding, presenting: saveError) { _ in
+            Button("Încearcă din nou") {
+                handleFinish()
+            }
+            Button("Anulează", role: .cancel) { saveError = nil }
+        } message: { error in
+            Text("Solomon nu a putut salva datele tale (\(error)). Apasă \"Încearcă din nou\" — fără asta, datele introduse se pierd.")
+        }
+    }
+
+    private var errorAlertBinding: Binding<Bool> {
+        Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )
     }
 
     // MARK: - Top bar
@@ -106,11 +122,10 @@ struct OnboardingContainerView: View {
             onFinish()
         } catch {
             // Save eșuat — context.rollback() a curățat deja toate scrierile parțiale.
-            // NU marcăm completed: userul rămâne în onboarding și poate apăsa Continuă din nou.
+            // NU marcăm completed și NU intrăm în app — afișăm alert cu retry.
+            // Înainte: ajungeam în main app cu profil gol → confuzie totală pentru user.
             Logger.onboarding.error("Onboarding save failed: \(error.localizedDescription, privacy: .public)")
-            // Pentru moment: tot apelăm onFinish ca să nu blocăm — dar fără markCompleted,
-            // următorul launch va re-arăta onboarding-ul.
-            onFinish()
+            saveError = error.localizedDescription
         }
     }
 }

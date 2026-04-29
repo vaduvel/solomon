@@ -227,8 +227,10 @@ final class AnalysisViewModel {
     var deltaPercentText: String = ""
     var savingsText: String = ""
     var deltaIsWarning: Bool = false
-    /// Guard împotriva re-fetch la fiecare tab switch.
-    private var isLoaded: Bool = false
+    /// Guard împotriva fetch-urilor concurente (NU împotriva re-fetch — în-flight only).
+    private var isLoading: Bool = false
+    /// Cache key bazat pe (count, latest date) — invalidează când userul adaugă/șterge tranzacții.
+    private var lastSnapshotKey: String = ""
 
     private var transactionRepo: (any TransactionRepository)?
     private let patternDetector = PatternDetector()
@@ -240,13 +242,25 @@ final class AnalysisViewModel {
     }
 
     func load() async {
-        guard !isLoaded, let repo = transactionRepo else { return }
+        // FIX 3: invalidăm cache-ul când nr de tranzacții sau data ultimei tranzacții
+        // s-au schimbat (user a adăugat/șters din alt tab) → datele rămân fresh,
+        // dar nu refacem fetch dacă nimic nu s-a schimbat.
+        guard !isLoading, let repo = transactionRepo else { return }
+        isLoading = true
+        defer { isLoading = false }
+
         let now = Date()
         let cal = Calendar.current
 
         // Fetch ultimele 90 zile pentru pattern detection
         guard let from90 = cal.date(byAdding: .day, value: -90, to: now) else { return }
         let txs = (try? repo.fetch(from: from90, to: now)) ?? []
+
+        // Cache key — invalidare automată la modificări
+        let latestDate = txs.first?.date.timeIntervalSince1970 ?? 0
+        let snapshotKey = "\(txs.count)|\(Int(latestDate))"
+        if snapshotKey == lastSnapshotKey { return }
+        lastSnapshotKey = snapshotKey
 
         // Pattern detection
         let report = patternDetector.detect(transactions: txs, windowDays: 90, referenceDate: now)
@@ -316,7 +330,6 @@ final class AnalysisViewModel {
         } else {
             savingsText = "0 RON"
         }
-        isLoaded = true
     }
 
     // MARK: - Helpers

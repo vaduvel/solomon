@@ -291,7 +291,13 @@ struct CanIAffordSheet: View {
 
         let cal = Calendar.current
         let today = cal.component(.day, from: Date())
-        let daysUntilNext = paydayDay > today ? (paydayDay - today) : (30 - today + paydayDay)
+        // FIX 4: foloseam 30 fix → eroare în ianuarie/martie/mai/iulie (31 zile)
+        // și februarie (28/29). Acum: daysInMonth real + clamp paydayDay la lungime.
+        let daysInMonth = cal.range(of: .day, in: .month, for: Date())?.count ?? 30
+        let clampedPayday = min(paydayDay, daysInMonth)
+        let daysUntilNext = clampedPayday > today
+            ? (clampedPayday - today)
+            : (daysInMonth - today + clampedPayday)
 
         let salaryMid = profile.financials.salaryRange.midpointRON
         let lastPayday: Date = {

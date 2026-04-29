@@ -211,12 +211,19 @@ struct EmailParserSheet: View {
             saveError = "Nu s-a putut extrage o sumă din email."
             return
         }
-        let moneyAmount = amount.moneyRON ?? Money(amount.value)  // fallback ron-treat
+        // FIX 2: refuză sumele non-RON (înainte: fallback "ron-treat" care saluta 50 EUR
+        // ca 50 RON în Safe-to-Spend). v2 va aduce conversie FX cu rate live.
+        guard let moneyAmount = amount.moneyRON else {
+            saveError = "Tranzacțiile în \(amount.currency.rawValue.uppercased()) nu sunt încă suportate. Solomon procesează doar RON momentan."
+            return
+        }
+        // FIX 2: folosim direction-ul parsat de SolomonEmail (corect: Credius email
+        // = .incoming pentru aprobare credit), NU forțăm .outgoing.
         let tx = Transaction(
-            id: UUID(),
+            id: deterministicEmailTxId(parsed: p),
             date: p.date,
             amount: moneyAmount,
-            direction: .outgoing,
+            direction: p.direction,
             category: p.suggestedCategory,
             merchant: p.merchant,
             description: "[\(amount.currency.rawValue.uppercased())] \(p.subject)",
@@ -231,6 +238,14 @@ struct EmailParserSheet: View {
         } catch {
             saveError = error.localizedDescription
         }
+    }
+
+    /// FIX 2 (bonus dedup): ID deterministic dintr-un email — same email parsat de 2 ori
+    /// produce același UUID → upsert detectează duplicatul. Cheie: from + subject + date.
+    private func deterministicEmailTxId(parsed p: ParsedEmailTransaction) -> UUID {
+        let bucket = Int(p.date.timeIntervalSince1970 / 60.0)
+        let key = "email|\(p.from)|\(p.subject)|\(bucket)"
+        return UUID.deterministic(from: key)
     }
 
     private func reset() {

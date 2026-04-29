@@ -18,6 +18,7 @@ struct ProfileEditView: View {
     @State private var paydayDay: Int = 28
     @State private var primaryBank: Bank = .bancaTransilvania
     @State private var hasSecondaryIncome: Bool = false
+    @State private var secondaryIncomeRON: Int = 0
     @State private var saveError: String?
     @State private var didSave: Bool = false
 
@@ -89,11 +90,35 @@ struct ProfileEditView: View {
                         }
 
                         // Secondary income
-                        SolomonToggle(
-                            title: "Ai venituri extra?",
-                            subtitle: "Freelance, chirii, etc.",
-                            isOn: $hasSecondaryIncome
-                        )
+                        VStack(alignment: .leading, spacing: SolSpacing.sm) {
+                            SolomonToggle(
+                                title: "Ai venituri extra?",
+                                subtitle: "Freelance, chirii, etc.",
+                                isOn: $hasSecondaryIncome
+                            )
+
+                            // FIX 5: input pentru sumă când toggle-ul e ON.
+                            // Înainte: hasSecondaryIncome=true se salva fără secondaryIncomeAvg
+                            // → la următorul fetch profilul arăta toggle ON dar 0 RON sumă.
+                            if hasSecondaryIncome {
+                                VStack(alignment: .leading, spacing: SolSpacing.xs) {
+                                    Text("Aproximativ cât? (RON / lună)")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                    SolomonTextInput(
+                                        placeholder: "ex: 1500",
+                                        text: Binding(
+                                            get: { secondaryIncomeRON > 0 ? "\(secondaryIncomeRON)" : "" },
+                                            set: { secondaryIncomeRON = Int($0) ?? 0 }
+                                        ),
+                                        icon: "banknote"
+                                    )
+                                    .keyboardType(.numberPad)
+                                }
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
+                        }
+                        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: hasSecondaryIncome)
 
                         if let saveError {
                             Text(saveError)
@@ -161,6 +186,8 @@ struct ProfileEditView: View {
         }
         primaryBank = profile.financials.primaryBank
         hasSecondaryIncome = profile.financials.hasSecondaryIncome
+        // FIX 5: încarc și secondaryIncomeAvg ca să nu se piardă la save
+        secondaryIncomeRON = profile.financials.secondaryIncomeAvg?.amount ?? 0
     }
 
     private func save() {
@@ -172,10 +199,12 @@ struct ProfileEditView: View {
             addressing: addressing,
             ageRange: ageRange
         )
+        // FIX 5: păstrăm secondaryIncomeAvg când toggle-ul e ON
         let fin = FinancialProfile(
             salaryRange: salaryRange,
             salaryFrequency: .monthly(dayOfMonth: paydayDay),
             hasSecondaryIncome: hasSecondaryIncome,
+            secondaryIncomeAvg: hasSecondaryIncome && secondaryIncomeRON > 0 ? Money(secondaryIncomeRON) : nil,
             primaryBank: primaryBank
         )
         let profile = UserProfile(demographics: demo, financials: fin)
