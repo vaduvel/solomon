@@ -11,7 +11,7 @@ import SolomonStorage
 
 struct OnboardingContainerView: View {
 
-    @StateObject private var state = OnboardingState()
+    @State private var state = OnboardingState()
 
     let onFinish: () -> Void
 
@@ -38,7 +38,7 @@ struct OnboardingContainerView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .environmentObject(state)
+        .environment(state)
     }
 
     // MARK: - Top bar

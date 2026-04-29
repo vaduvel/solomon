@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 import SolomonCore
 import SolomonStorage
 
@@ -9,7 +10,7 @@ import SolomonStorage
 
 struct SettingsView: View {
 
-    @StateObject private var vm = SettingsViewModel()
+    @State private var vm = SettingsViewModel()
     @State private var showShortcutSetup = false
     @State private var showProfileEdit = false
     @State private var showGoalsList = false
@@ -345,20 +346,20 @@ struct SettingsView: View {
 
 // MARK: - SettingsViewModel
 
-@MainActor
-final class SettingsViewModel: ObservableObject {
-    @Published var userName: String = "..."
-    @Published var userPlan: String = "Solomon Plus · Activ"
-    @Published var isGmailConnected: Bool = false {
+@Observable @MainActor
+final class SettingsViewModel {
+    var userName: String = "..."
+    var userPlan: String = "Solomon Plus · Activ"
+    var isGmailConnected: Bool = false {
         didSet { persistConsent() }
     }
-    @Published var notificationsEnabled: Bool = false {
+    var notificationsEnabled: Bool = false {
         didSet { persistConsent() }
     }
-    @Published var trainingOptIn: Bool = false {
+    var trainingOptIn: Bool = false {
         didSet { persistConsent() }
     }
-    @Published var connectedBanks: [String] = []
+    var connectedBanks: [String] = []
 
     private var userProfileRepo: (any UserProfileRepository)?
     private var isLoading: Bool = false
@@ -390,6 +391,7 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func configure(persistence: SolomonPersistenceController) {
+        guard userProfileRepo == nil else { return }  // evită re-configurare la fiecare tab switch
         let ctx = persistence.container.viewContext
         self.userProfileRepo = CoreDataUserProfileRepository(context: ctx)
         load()

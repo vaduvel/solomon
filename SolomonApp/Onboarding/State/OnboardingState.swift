@@ -1,6 +1,6 @@
 import Foundation
+import Observation
 import SwiftUI
-import Combine
 import SolomonCore
 import SolomonStorage
 
@@ -10,8 +10,8 @@ import SolomonStorage
 // Persistă draft-ul intermediar în UserDefaults pentru recovery la crash/exit.
 // La final: salvează UserProfile + Goal + Obligations în CoreData.
 
-@MainActor
-final class OnboardingState: ObservableObject {
+@Observable @MainActor
+final class OnboardingState {
 
     // MARK: - First-run flag
 
@@ -31,7 +31,7 @@ final class OnboardingState: ObservableObject {
 
     // MARK: - Navigation
 
-    @Published var currentStep: Int = 0   // 0...8 (9 ecrane)
+    var currentStep: Int = 0   // 0...8 (9 ecrane)
     static let totalSteps = 9
 
     var canGoBack: Bool { currentStep > 0 && currentStep < 8 }
@@ -54,23 +54,23 @@ final class OnboardingState: ObservableObject {
 
     // MARK: - Ecran 2 — Identitate
 
-    @Published var name: String = ""
-    @Published var addressing: Addressing = .tu
+    var name: String = ""
+    var addressing: Addressing = .tu
 
     // MARK: - Ecran 3 — Venit
 
-    @Published var salaryRange: SalaryRange? = nil
-    @Published var paydayDay: Int = 28
-    @Published var hasSecondaryIncome: Bool = false
-    @Published var secondaryIncomeApprox: Int = 0  // RON
+    var salaryRange: SalaryRange? = nil
+    var paydayDay: Int = 28
+    var hasSecondaryIncome: Bool = false
+    var secondaryIncomeApprox: Int = 0  // RON
 
     // MARK: - Ecran 4 — Bancă
 
-    @Published var primaryBank: Bank? = nil
+    var primaryBank: Bank? = nil
 
     // MARK: - Ecran 5 — Obligații cunoscute (draft)
 
-    @Published var draftObligations: [DraftObligation] = []
+    var draftObligations: [DraftObligation] = []
 
     struct DraftObligation: Identifiable {
         let id = UUID()
@@ -92,8 +92,8 @@ final class OnboardingState: ObservableObject {
 
     // MARK: - Ecran 6 — Obiective
 
-    @Published var selectedGoals: Set<GoalChip> = []
-    @Published var bigGoalText: String = ""
+    var selectedGoals: Set<GoalChip> = []
+    var bigGoalText: String = ""
 
     enum GoalChip: String, CaseIterable, Hashable {
         case noZeroOn22       = "Să nu mai fiu pe zero pe 22"
@@ -105,13 +105,13 @@ final class OnboardingState: ObservableObject {
 
     // MARK: - Ecran 7 — Permisiuni
 
-    @Published var gmailConnected: Bool = false
-    @Published var pushAllowed: Bool = false
-    @Published var trainingOptIn: Bool = false
+    var gmailConnected: Bool = false
+    var pushAllowed: Bool = false
+    var trainingOptIn: Bool = false
 
     // MARK: - Ecran 8 — Procesare
 
-    @Published var processingTasks: [ProcessingTaskState] = [
+    var processingTasks: [ProcessingTaskState] = [
         ProcessingTaskState(title: "Citesc emailurile financiare...",      state: .pending),
         ProcessingTaskState(title: "Identific tranzacții și abonamente...", state: .pending),
         ProcessingTaskState(title: "Caut pattern-uri...",                   state: .pending),
@@ -136,8 +136,8 @@ final class OnboardingState: ObservableObject {
 
     // MARK: - Ecran 9 — Wow Moment generation
 
-    @Published var isGeneratingWow: Bool = false
-    @Published var wowMomentText: String = ""
+    var isGeneratingWow: Bool = false
+    var wowMomentText: String = ""
 
     // MARK: - Validation
 

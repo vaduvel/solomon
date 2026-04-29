@@ -6,9 +6,10 @@ import SolomonCore
 // Pattern: List + plus button + skip option.
 
 struct OnboardingScreen5Obligations: View {
-    @EnvironmentObject var state: OnboardingState
+    @Environment(OnboardingState.self) var state: OnboardingState
 
     var body: some View {
+        @Bindable var state = state
         ScrollView {
             VStack(alignment: .leading, spacing: SolSpacing.xl) {
 
@@ -158,7 +159,7 @@ private struct DraftObligationRow: View {
     ZStack {
         Color.solCanvas.ignoresSafeArea()
         OnboardingScreen5Obligations()
-            .environmentObject(OnboardingState())
+            .environment(OnboardingState())
     }
     .preferredColorScheme(.dark)
 }

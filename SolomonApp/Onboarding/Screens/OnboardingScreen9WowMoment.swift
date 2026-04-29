@@ -10,7 +10,7 @@ import SolomonMoments
 // Template dacă MLX nu e disponibil) cu cifrele lui personalizate.
 
 struct OnboardingScreen9WowMoment: View {
-    @EnvironmentObject var state: OnboardingState
+    @Environment(OnboardingState.self) var state
     let onFinish: () -> Void
 
     @State private var llmResponse: String?
@@ -265,7 +265,10 @@ struct OnboardingScreen9WowMoment: View {
     private var safeToSpendValue: Int {
         let salary = state.salaryRange?.midpointRON ?? 5000
         let obligations = state.draftObligations.reduce(0) { $0 + $1.amountRON }
-        return max(0, salary - obligations - 1500)
+        // Estimare simplă: venit - obligații fixe declarate.
+        // Nu deducem cheltuieli variabile (nu le știm încă) — Safe to Spend real
+        // se calculează în TodayView după ce userul adaugă tranzacții.
+        return max(0, salary - obligations)
     }
 
     private var safeToSpendFormatted: String {
@@ -289,7 +292,7 @@ struct OnboardingScreen9WowMoment: View {
     ZStack {
         Color.solCanvas.ignoresSafeArea()
         OnboardingScreen9WowMoment(onFinish: {})
-            .environmentObject({
+            .environment({
                 let s = OnboardingState()
                 s.name = "Andrei"
                 s.salaryRange = .range5to8

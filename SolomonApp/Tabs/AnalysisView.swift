@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 import SolomonCore
 import SolomonStorage
 import SolomonAnalytics
@@ -10,7 +11,7 @@ import SolomonAnalytics
 
 struct AnalysisView: View {
 
-    @StateObject private var vm = AnalysisViewModel()
+    @State private var vm = AnalysisViewModel()
 
     var body: some View {
         NavigationStack {
@@ -215,17 +216,19 @@ struct MonthTrend: Identifiable {
 
 // MARK: - AnalysisViewModel
 
-@MainActor
-final class AnalysisViewModel: ObservableObject {
+@Observable @MainActor
+final class AnalysisViewModel {
 
-    @Published var categories: [CategoryBreakdown] = []
-    @Published var monthlyTrend: [MonthTrend] = []
-    @Published var currentMonthSpentRON: Int = 0
-    @Published var lastMonthSpentRON: Int = 0
-    @Published var currentMonthLabel: String = ""
-    @Published var deltaPercentText: String = ""
-    @Published var savingsText: String = ""
-    @Published var deltaIsWarning: Bool = false
+    var categories: [CategoryBreakdown] = []
+    var monthlyTrend: [MonthTrend] = []
+    var currentMonthSpentRON: Int = 0
+    var lastMonthSpentRON: Int = 0
+    var currentMonthLabel: String = ""
+    var deltaPercentText: String = ""
+    var savingsText: String = ""
+    var deltaIsWarning: Bool = false
+    /// Guard împotriva re-fetch la fiecare tab switch.
+    private var isLoaded: Bool = false
 
     private var transactionRepo: (any TransactionRepository)?
     private let patternDetector = PatternDetector()
@@ -237,7 +240,7 @@ final class AnalysisViewModel: ObservableObject {
     }
 
     func load() async {
-        guard let repo = transactionRepo else { return }
+        guard !isLoaded, let repo = transactionRepo else { return }
         let now = Date()
         let cal = Calendar.current
 
@@ -313,6 +316,7 @@ final class AnalysisViewModel: ObservableObject {
         } else {
             savingsText = "0 RON"
         }
+        isLoaded = true
     }
 
     // MARK: - Helpers

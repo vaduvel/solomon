@@ -3,9 +3,10 @@ import SwiftUI
 // MARK: - Ecran 6 — Obiectiv (HIG aligned)
 
 struct OnboardingScreen6Goal: View {
-    @EnvironmentObject var state: OnboardingState
+    @Environment(OnboardingState.self) var state: OnboardingState
 
     var body: some View {
+        @Bindable var state = state
         ScrollView {
             VStack(alignment: .leading, spacing: SolSpacing.xxl) {
 
@@ -99,7 +100,7 @@ struct OnboardingScreen6Goal: View {
     ZStack {
         Color.solCanvas.ignoresSafeArea()
         OnboardingScreen6Goal()
-            .environmentObject({
+            .environment({
                 let s = OnboardingState()
                 s.selectedGoals = [.noZeroOn22]
                 return s

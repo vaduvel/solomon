@@ -6,7 +6,7 @@ import SwiftUI
 // Folosim .symbolEffect(.pulse) iOS 17+ pentru animație nativ.
 
 struct OnboardingScreen8Processing: View {
-    @EnvironmentObject var state: OnboardingState
+    @Environment(OnboardingState.self) var state
 
     var body: some View {
         VStack(spacing: 0) {
@@ -82,7 +82,7 @@ struct OnboardingScreen8Processing: View {
     ZStack {
         Color.solCanvas.ignoresSafeArea()
         OnboardingScreen8Processing()
-            .environmentObject(OnboardingState())
+            .environment(OnboardingState())
     }
     .preferredColorScheme(.dark)
 }

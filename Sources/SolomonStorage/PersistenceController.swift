@@ -38,12 +38,39 @@ public final class SolomonPersistenceController: @unchecked Sendable {
             desc.url = URL(fileURLWithPath: "/dev/null")
             desc.type = NSInMemoryStoreType
             c.persistentStoreDescriptions = [desc]
+        } else {
+            // Activăm migrare automată — esențial când schema evoluează între versiuni.
+            // Fără aceste opțiuni, orice atribut nou adăugat corupe store-ul existent.
+            if let desc = c.persistentStoreDescriptions.first {
+                desc.setOption(true as NSNumber, forKey: NSMigratePersistentStoresAutomaticallyOption)
+                desc.setOption(true as NSNumber, forKey: NSInferMappingModelAutomaticallyOption)
+            }
         }
+
         var loadError: Error?
         c.loadPersistentStores { _, error in loadError = error }
+
         if let error = loadError {
-            fatalError("Solomon Core Data failed to load: \(error)")
+            // Migrarea automată a eșuat — store-ul e corupt sau incompatibil.
+            // Strategie: ștergem și recreăm (date pierdute, dar app-ul devine funcțional).
+            // Alternativa este un crash loop infinit, care e mai rău pentru un pilot.
+            #if DEBUG
+            print("⚠️ Solomon CoreData: store load failed (\(error)). Deleting and recreating...")
+            #endif
+            if let storeURL = c.persistentStoreDescriptions.first?.url {
+                let base = storeURL.deletingLastPathComponent()
+                let name  = storeURL.deletingPathExtension().lastPathComponent
+                for ext in ["sqlite", "sqlite-shm", "sqlite-wal"] {
+                    try? FileManager.default.removeItem(at: base.appendingPathComponent("\(name).\(ext)"))
+                }
+            }
+            c.loadPersistentStores { _, retryError in
+                if let retryError {
+                    fatalError("Solomon CoreData unrecoverable after reset: \(retryError)")
+                }
+            }
         }
+
         c.viewContext.automaticallyMergesChangesFromParent = true
         c.viewContext.mergePolicy = NSMergePolicy.mergeByPropertyObjectTrump
         self.container = c

@@ -6,7 +6,7 @@ import SwiftUI
 // Spec §11 ecran 1 — păstrăm conținutul, refactor layout.
 
 struct OnboardingScreen1Welcome: View {
-    @EnvironmentObject var state: OnboardingState
+    @Environment(OnboardingState.self) var state
 
     var body: some View {
         VStack(spacing: 0) {
@@ -92,7 +92,7 @@ struct OnboardingScreen1Welcome: View {
     ZStack {
         Color.solCanvas.ignoresSafeArea()
         OnboardingScreen1Welcome()
-            .environmentObject(OnboardingState())
+            .environment(OnboardingState())
     }
     .preferredColorScheme(.dark)
 }

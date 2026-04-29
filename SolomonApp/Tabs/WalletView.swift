@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 import SolomonCore
 import SolomonStorage
 import SolomonAnalytics
@@ -10,7 +11,7 @@ import SolomonAnalytics
 
 struct WalletView: View {
 
-    @StateObject private var vm = WalletViewModel()
+    @State private var vm = WalletViewModel()
     @State private var selectedSegment = 0
     @State private var showSubscriptionAudit = false
     @State private var showSuspiciousTransactions = false
@@ -364,7 +365,8 @@ struct ObligationRow: View {
 
     private var daysUntil: Int {
         let due = obligation.dayOfMonth
-        return due > dayOfMonth ? (due - dayOfMonth) : (30 - dayOfMonth + due)
+        let daysInMonth = Calendar.current.range(of: .day, in: .month, for: Date())?.count ?? 30
+        return due > dayOfMonth ? (due - dayOfMonth) : (daysInMonth - dayOfMonth + due)
     }
 
     private var isUrgent: Bool { daysUntil <= 3 }
@@ -520,16 +522,19 @@ struct TransactionRow: View {
 
 // MARK: - WalletViewModel (CoreData wired)
 
-@MainActor
-final class WalletViewModel: ObservableObject {
+@Observable @MainActor
+final class WalletViewModel {
 
-    @Published var obligations: [Obligation] = []
-    @Published var subscriptions: [Subscription] = []
-    @Published var transactions: [SolomonCore.Transaction] = []
+    var obligations: [Obligation] = []
+    var subscriptions: [Subscription] = []
+    var transactions: [SolomonCore.Transaction] = []
+    /// Salariul real al userului — încărcat din UserProfile pentru calcule corecte.
+    private var salaryMidRON: Int = 5000
 
     private var transactionRepo: (any TransactionRepository)?
     private var obligationRepo: (any ObligationRepository)?
     private var subscriptionRepo: (any SubscriptionRepository)?
+    private var userProfileRepo: (any UserProfileRepository)?
     private let usageDetector = SubscriptionUsageDetector()
 
     func configure(persistence: SolomonPersistenceController) {
@@ -537,15 +542,19 @@ final class WalletViewModel: ObservableObject {
         self.transactionRepo  = CoreDataTransactionRepository(context: ctx)
         self.obligationRepo   = CoreDataObligationRepository(context: ctx)
         self.subscriptionRepo = CoreDataSubscriptionRepository(context: ctx)
+        self.userProfileRepo  = CoreDataUserProfileRepository(context: ctx)
     }
 
     func load() async {
         obligations  = (try? obligationRepo?.fetchAll()) ?? []
         let allTx = (try? transactionRepo?.fetchAll()) ?? []
         let rawSubs = (try? subscriptionRepo?.fetchAll()) ?? []
-        // Auto-enrich lastUsedDaysAgo prin matching tranzacții
         subscriptions = usageDetector.enrichWithUsage(subscriptions: rawSubs, transactions: allTx)
         transactions = (try? transactionRepo?.fetchRecent(limit: 50)) ?? []
+        // Actualizăm salariul real din profilul userului
+        if let profile = try? userProfileRepo?.fetchProfile() {
+            salaryMidRON = profile.financials.salaryRange.midpointRON
+        }
     }
 
     // MARK: - Computed totals
@@ -559,15 +568,14 @@ final class WalletViewModel: ObservableObject {
     }
 
     var obligationsPercentText: String {
-        // Heuristic: assuming midpoint salary ~5000 RON
-        guard obligationsTotalRON > 0 else { return "" }
-        let pct = Int(Double(obligationsTotalRON) / 5000.0 * 100)
+        guard obligationsTotalRON > 0, salaryMidRON > 0 else { return "" }
+        let pct = Int(Double(obligationsTotalRON) / Double(salaryMidRON) * 100)
         return "\(pct)% din venit"
     }
 
     var obligationsKind: StatusBadge.Kind {
-        guard obligationsTotalRON > 0 else { return .neutral }
-        let pct = Double(obligationsTotalRON) / 5000.0
+        guard obligationsTotalRON > 0, salaryMidRON > 0 else { return .neutral }
+        let pct = Double(obligationsTotalRON) / Double(salaryMidRON)
         if pct < 0.4 { return .success }
         if pct < 0.6 { return .warning }
         return .danger

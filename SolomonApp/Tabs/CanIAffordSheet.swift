@@ -341,8 +341,10 @@ struct CanIAffordSheet: View {
             ? Money(projectedAvailable.amount / budget.daysUntilNextPayday)
             : projectedAvailable
 
+        guard let currentVerdict = verdict else { return }
+
         let verdictReason: CanIAffordVerdictReason
-        switch verdict! {
+        switch currentVerdict {
         case .yes:                                           verdictReason = .comfortableMargin
         case .yesWithCaution(let reason, _):                 verdictReason = reason
         case .no(let reason):                                verdictReason = reason
@@ -366,7 +368,7 @@ struct CanIAffordSheet: View {
                 availablePerDayAfterPurchase: perDayAfter
             ),
             decision: CanIAffordDecision(
-                verdict: verdict!.asContextVerdict,
+                verdict: currentVerdict.asContextVerdict,
                 verdictReason: verdictReason,
                 mathVisible: "după \(item): \(projectedAvailable.amount) RON / \(budget.daysUntilNextPayday) zile = \(perDayAfter.amount) RON/zi",
                 alternativeToSuggest: .none

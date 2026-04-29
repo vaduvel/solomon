@@ -4,10 +4,11 @@ import SolomonCore
 // MARK: - Ecran 2 — Identitate (Apple HIG aligned)
 
 struct OnboardingScreen2Identity: View {
-    @EnvironmentObject var state: OnboardingState
+    @Environment(OnboardingState.self) var state: OnboardingState
     @FocusState private var nameFocused: Bool
 
     var body: some View {
+        @Bindable var state = state
         ScrollView {
             VStack(alignment: .leading, spacing: SolSpacing.xxl) {
 
@@ -71,7 +72,7 @@ struct OnboardingScreen2Identity: View {
     ZStack {
         Color.solCanvas.ignoresSafeArea()
         OnboardingScreen2Identity()
-            .environmentObject(OnboardingState())
+            .environment(OnboardingState())
     }
     .preferredColorScheme(.dark)
 }

@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import SwiftUI
 import SolomonLLM
 
@@ -7,16 +8,16 @@ import SolomonLLM
 // State observable pentru UI. Se conectează la MLXLLMProvider și surface state-ul
 // (notDownloaded / downloading / loaded / failed) către SwiftUI views.
 
-@MainActor
-public final class ModelDownloadService: ObservableObject {
+@Observable @MainActor
+public final class ModelDownloadService {
 
     public static let shared = ModelDownloadService()
 
-    // MARK: - Published
+    // MARK: - Observable state
 
-    @Published public private(set) var state: MLXLLMProvider.State = .notDownloaded
-    @Published public private(set) var config: MLXLLMProvider.Config = .gemmaE2B
-    @Published public private(set) var downloadedSizeBytes: Int64 = 0
+    public private(set) var state: MLXLLMProvider.State = .notDownloaded
+    public private(set) var config: MLXLLMProvider.Config = .gemmaE2B
+    public private(set) var downloadedSizeBytes: Int64 = 0
 
     // MARK: - Internals
 
@@ -59,11 +60,9 @@ public final class ModelDownloadService: ObservableObject {
 
     /// Pornește download-ul + load. Apelat din onboarding sau Settings.
     public func startDownloadAndLoad() async {
-        guard let provider else {
-            await createProvider()
-            await startDownloadAndLoad()
-            return
-        }
+        // Creem provider-ul dacă nu există — fără recursie
+        if provider == nil { await createProvider() }
+        guard let provider else { return }
         do {
             try await provider.preloadModel()
             await syncState()

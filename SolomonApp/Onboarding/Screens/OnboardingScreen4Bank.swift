@@ -4,9 +4,10 @@ import SolomonCore
 // MARK: - Ecran 4 — Bancă principală (HIG aligned)
 
 struct OnboardingScreen4Bank: View {
-    @EnvironmentObject var state: OnboardingState
+    @Environment(OnboardingState.self) var state: OnboardingState
 
     var body: some View {
+        @Bindable var state = state
         ScrollView {
             VStack(alignment: .leading, spacing: SolSpacing.xxl) {
 
@@ -45,7 +46,7 @@ struct OnboardingScreen4Bank: View {
     ZStack {
         Color.solCanvas.ignoresSafeArea()
         OnboardingScreen4Bank()
-            .environmentObject(OnboardingState())
+            .environment(OnboardingState())
     }
     .preferredColorScheme(.dark)
 }

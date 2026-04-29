@@ -13,6 +13,7 @@ struct ProfileEditView: View {
 
     @State private var name: String = ""
     @State private var addressing: Addressing = .tu
+    @State private var ageRange: AgeRange = .range25to35
     @State private var salaryRange: SalaryRange = .range5to8
     @State private var paydayDay: Int = 28
     @State private var primaryBank: Bank = .bancaTransilvania
@@ -153,6 +154,7 @@ struct ProfileEditView: View {
         guard let profile = try? repo.fetchProfile() else { return }
         name = profile.demographics.name
         addressing = profile.demographics.addressing
+        ageRange = profile.demographics.ageRange
         salaryRange = profile.financials.salaryRange
         if case .monthly(let day) = profile.financials.salaryFrequency {
             paydayDay = day
@@ -168,7 +170,7 @@ struct ProfileEditView: View {
         let demo = DemographicProfile(
             name: name.trimmingCharacters(in: .whitespaces),
             addressing: addressing,
-            ageRange: .range25to35
+            ageRange: ageRange
         )
         let fin = FinancialProfile(
             salaryRange: salaryRange,

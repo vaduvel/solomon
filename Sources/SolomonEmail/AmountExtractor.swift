@@ -59,7 +59,10 @@ public struct AmountExtractor: Sendable {
     /// Pattern principal: număr în format RO/EN + monedă (RON/lei/EUR/€).
     static let amountRegex: NSRegularExpression = {
         let pattern = #"(?<![,.\d])(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:RON|lei|EUR|€)"#
-        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+        guard let re = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+            preconditionFailure("AmountExtractor.amountRegex: invalid pattern — fix the regex string literal")
+        }
+        return re
     }()
 
     /// Pattern secundar: label financiar urmat de sumă (captează suma în grup 1).
@@ -68,13 +71,19 @@ public struct AmountExtractor: Sendable {
         let number = #"(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)"#
         let currency = #"(?:RON|lei|EUR|€)"#
         let pattern = "\(labels)[:\\s]+\(number)\\s*\(currency)"
-        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+        guard let re = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+            preconditionFailure("AmountExtractor.labeledAmountRegex: invalid pattern — fix the regex string literal")
+        }
+        return re
     }()
 
     /// Pattern pentru euro cu simbol înainte (€100,50).
     static let eurPrefixRegex: NSRegularExpression = {
         let pattern = #"€\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)"#
-        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+        guard let re = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+            preconditionFailure("AmountExtractor.eurPrefixRegex: invalid pattern — fix the regex string literal")
+        }
+        return re
     }()
 
     // MARK: - Private parsing

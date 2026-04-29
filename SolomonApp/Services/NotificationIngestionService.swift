@@ -1,7 +1,7 @@
 import Foundation
+import Observation
 import SolomonCore
 import SolomonStorage
-import Combine
 
 // MARK: - NotificationIngestionService
 //
@@ -24,26 +24,26 @@ import Combine
 // Exemplu Shortcuts action:
 //   Open URL: solomon://transaction?raw=[Conținut notificare]
 
-@MainActor
-public final class NotificationIngestionService: ObservableObject {
+@Observable @MainActor
+public final class NotificationIngestionService {
 
     // MARK: - Singleton
 
     public static let shared = NotificationIngestionService()
 
-    // MARK: - Published state
+    // MARK: - Observable state
 
     /// Ultima tranzacție parsată — UI poate observa pentru feedback instant.
-    @Published public private(set) var lastIngested: Transaction?
+    public private(set) var lastIngested: Transaction?
 
     /// Dacă ultima ingestie e o tranzacție IFN — UI ridică alertă specifică.
-    @Published public private(set) var lastIFNAlert: IFNRecord?
+    public private(set) var lastIFNAlert: IFNRecord?
 
     /// Numărul total de tranzacții ingested în sesiunea curentă.
-    @Published public private(set) var sessionCount: Int = 0
+    public private(set) var sessionCount: Int = 0
 
     /// Eroarea ultimei ingestii (nil dacă succes).
-    @Published public private(set) var lastError: IngestionError?
+    public private(set) var lastError: IngestionError?
 
     // MARK: - Dependencies
 

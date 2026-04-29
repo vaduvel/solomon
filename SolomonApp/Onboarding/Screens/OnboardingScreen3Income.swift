@@ -4,9 +4,10 @@ import SolomonCore
 // MARK: - Ecran 3 — Venit (Apple HIG aligned)
 
 struct OnboardingScreen3Income: View {
-    @EnvironmentObject var state: OnboardingState
+    @Environment(OnboardingState.self) var state: OnboardingState
 
     var body: some View {
+        @Bindable var state = state
         ScrollView {
             VStack(alignment: .leading, spacing: SolSpacing.xxl) {
 
@@ -46,11 +47,36 @@ struct OnboardingScreen3Income: View {
                 }
 
                 // Secondary income
-                SolomonToggle(
-                    title: "Ai venituri extra?",
-                    subtitle: "Freelance, chirii, etc.",
-                    isOn: $state.hasSecondaryIncome
-                )
+                VStack(alignment: .leading, spacing: SolSpacing.sm) {
+                    SolomonToggle(
+                        title: "Ai venituri extra?",
+                        subtitle: "Freelance, chirii, etc.",
+                        isOn: $state.hasSecondaryIncome
+                    )
+
+                    if state.hasSecondaryIncome {
+                        VStack(alignment: .leading, spacing: SolSpacing.xs) {
+                            Text("Aproximativ cât? (RON / lună)")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            SolomonTextInput(
+                                placeholder: "ex: 1500",
+                                text: Binding(
+                                    get: {
+                                        state.secondaryIncomeApprox > 0
+                                            ? "\(state.secondaryIncomeApprox)"
+                                            : ""
+                                    },
+                                    set: { state.secondaryIncomeApprox = Int($0) ?? 0 }
+                                ),
+                                icon: "banknote"
+                            )
+                            .keyboardType(.numberPad)
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+                .animation(.spring(response: 0.3, dampingFraction: 0.85), value: state.hasSecondaryIncome)
 
                 Spacer(minLength: SolSpacing.lg)
             }
@@ -115,7 +141,7 @@ struct OnboardingScreen3Income: View {
     ZStack {
         Color.solCanvas.ignoresSafeArea()
         OnboardingScreen3Income()
-            .environmentObject(OnboardingState())
+            .environment(OnboardingState())
     }
     .preferredColorScheme(.dark)
 }

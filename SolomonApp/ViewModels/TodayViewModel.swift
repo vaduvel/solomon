@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 import SolomonCore
 import SolomonStorage
 import SolomonAnalytics
@@ -11,21 +12,21 @@ import SolomonMoments
 //   - Moment curent (MomentEngine cu TemplateLLMProvider fallback)
 //   - Greeting personalizat din UserProfile
 
-@MainActor
-final class TodayViewModel: ObservableObject {
+@Observable @MainActor
+final class TodayViewModel {
 
-    // MARK: - Published state
+    // MARK: - State
 
-    @Published var currentMoment: DisplayMoment?
-    @Published var recentMoments: [DisplayMoment] = []
-    @Published var safeToSpendFormatted: String = "..."
-    @Published var perDayFormatted: String?
-    @Published var greetingText: String = ""
-    @Published var userName: String = ""
-    @Published var hasUnreadAlert: Bool = false
+    var currentMoment: DisplayMoment?
+    var recentMoments: [DisplayMoment] = []
+    var safeToSpendFormatted: String = "..."
+    var perDayFormatted: String?
+    var greetingText: String = ""
+    var userName: String = ""
+    var hasUnreadAlert: Bool = false
 
-    @Published var isBudgetTight: Bool = false
-    @Published var isLoadingMoment: Bool = false
+    var isBudgetTight: Bool = false
+    var isLoadingMoment: Bool = false
 
     // MARK: - Dependencies
 

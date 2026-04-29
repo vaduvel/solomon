@@ -9,8 +9,8 @@ import SolomonStorage
 
 struct TodayView: View {
 
-    @StateObject private var vm = TodayViewModel()
-    @ObservedObject private var ingestion = NotificationIngestionService.shared
+    @State private var vm = TodayViewModel()
+    @State private var ingestion = NotificationIngestionService.shared
     @State private var showManualEntry = false
     @State private var showCanIAfford = false
     @State private var showAlerts = false

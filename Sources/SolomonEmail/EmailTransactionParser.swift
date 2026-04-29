@@ -72,8 +72,13 @@ public struct EmailTransactionParser: Sendable {
         Self.quickAmountPattern.firstMatch(in: body, range: NSRange(body.startIndex..., in: body)) != nil
     }
 
-    private static let quickAmountPattern: NSRegularExpression =
-        try! NSRegularExpression(pattern: #"\d+[,.]?\d*\s*(RON|lei|EUR|€)"#, options: .caseInsensitive)
+    private static let quickAmountPattern: NSRegularExpression = {
+        guard let re = try? NSRegularExpression(
+            pattern: #"\d+[,.]?\d*\s*(RON|lei|EUR|€)"#,
+            options: .caseInsensitive
+        ) else { preconditionFailure("EmailTransactionParser.quickAmountPattern: invalid pattern") }
+        return re
+    }()
 
     private func resolveCategory(
         senderResult: SenderMatchResult?,

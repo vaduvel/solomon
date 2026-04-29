@@ -14,7 +14,7 @@ import SolomonLLM
 struct ModelDownloadView: View {
 
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var service = ModelDownloadService.shared
+    @State private var service = ModelDownloadService.shared
     @State private var showConfirmDelete: Bool = false
 
     var body: some View {

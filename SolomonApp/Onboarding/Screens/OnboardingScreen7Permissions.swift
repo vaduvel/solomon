@@ -8,7 +8,7 @@ import UserNotifications
 // Spec §11 ecran 7.
 
 struct OnboardingScreen7Permissions: View {
-    @EnvironmentObject var state: OnboardingState
+    @Environment(OnboardingState.self) var state
 
     var body: some View {
         ScrollView {
@@ -152,7 +152,7 @@ struct OnboardingScreen7Permissions: View {
     ZStack {
         Color.solCanvas.ignoresSafeArea()
         OnboardingScreen7Permissions()
-            .environmentObject(OnboardingState())
+            .environment(OnboardingState())
     }
     .preferredColorScheme(.dark)
 }

@@ -117,7 +117,10 @@ public enum BankNotificationParser {
         // Grup 1: suma (cu punct mii + virgulă/punct zecimal)
         // Grup 2: valuta
         let pattern = #"(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(RON|EUR|USD|GBP|CHF|HUF)"#
-        return try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+        guard let re = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+            preconditionFailure("BankNotificationParser.amountPattern: invalid pattern — fix the regex string literal")
+        }
+        return re
     }()
 
     static let bankKeywords = [
