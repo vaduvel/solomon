@@ -15,6 +15,11 @@ struct WalletView: View {
     @State private var showSubscriptionAudit = false
     @State private var showSuspiciousTransactions = false
     @State private var showManualEntry = false
+    // Edit sheets — context-aware per tab
+    @State private var showAddObligation = false
+    @State private var showAddSubscription = false
+    @State private var editingObligation: Obligation?
+    @State private var editingSubscription: Subscription?
 
     var body: some View {
         NavigationStack {
@@ -47,9 +52,14 @@ struct WalletView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
+                    // "+" context-aware: deschide formularul corect per tab activ
                     Button {
                         Haptics.light()
-                        showManualEntry = true
+                        switch selectedSegment {
+                        case 0: showAddObligation = true
+                        case 1: showAddSubscription = true
+                        default: showManualEntry = true
+                        }
                     } label: {
                         Image(systemName: "plus")
                             .font(.body.weight(.semibold))
@@ -65,6 +75,20 @@ struct WalletView: View {
             }
             .sheet(isPresented: $showManualEntry, onDismiss: { Task { await vm.load() } }) {
                 ManualTransactionView().solStandardSheet()
+            }
+            // Obligation sheets
+            .sheet(isPresented: $showAddObligation, onDismiss: { Task { await vm.load() } }) {
+                ObligationEditView().solStandardSheet()
+            }
+            .sheet(item: $editingObligation, onDismiss: { Task { await vm.load() } }) { obl in
+                ObligationEditView(editingObligation: obl).solStandardSheet()
+            }
+            // Subscription sheets
+            .sheet(isPresented: $showAddSubscription, onDismiss: { Task { await vm.load() } }) {
+                SubscriptionEditView().solStandardSheet()
+            }
+            .sheet(item: $editingSubscription, onDismiss: { Task { await vm.load() } }) { sub in
+                SubscriptionEditView(editingSubscription: sub).solStandardSheet()
             }
         }
         .task {
@@ -136,7 +160,17 @@ struct WalletView: View {
             } else {
                 VStack(spacing: SolSpacing.sm) {
                     ForEach(vm.obligations) { obl in
-                        ObligationRow(obligation: obl)
+                        Button { editingObligation = obl } label: {
+                            ObligationRow(obligation: obl)
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                vm.deleteObligation(id: obl.id)
+                            } label: {
+                                Label("Șterge", systemImage: "trash")
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, SolSpacing.screenHorizontal)
@@ -205,7 +239,17 @@ struct WalletView: View {
 
                 VStack(spacing: SolSpacing.sm) {
                     ForEach(vm.subscriptions) { sub in
-                        SubscriptionRow(subscription: sub)
+                        Button { editingSubscription = sub } label: {
+                            SubscriptionRow(subscription: sub)
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                vm.deleteSubscription(id: sub.id)
+                            } label: {
+                                Label("Șterge", systemImage: "trash")
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, SolSpacing.screenHorizontal)
@@ -247,6 +291,13 @@ struct WalletView: View {
                 VStack(spacing: SolSpacing.sm) {
                     ForEach(vm.transactions) { tx in
                         TransactionRow(transaction: tx)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    vm.deleteTransaction(id: tx.id)
+                                } label: {
+                                    Label("Șterge", systemImage: "trash")
+                                }
+                            }
                     }
                 }
                 .padding(.horizontal, SolSpacing.screenHorizontal)
@@ -532,6 +583,26 @@ final class WalletViewModel: ObservableObject {
 
     var ghostSavingsPotential: Int {
         subscriptions.filter { $0.isGhost }.reduce(0) { $0 + $1.amountMonthly.amount }
+    }
+
+    // MARK: - Delete helpers (apelate din swipeActions)
+
+    func deleteObligation(id: UUID) {
+        try? obligationRepo?.delete(id: id)
+        obligations.removeAll { $0.id == id }
+        Haptics.success()
+    }
+
+    func deleteSubscription(id: UUID) {
+        try? subscriptionRepo?.delete(id: id)
+        subscriptions.removeAll { $0.id == id }
+        Haptics.success()
+    }
+
+    func deleteTransaction(id: UUID) {
+        try? transactionRepo?.delete(id: id)
+        transactions.removeAll { $0.id == id }
+        Haptics.success()
     }
 }
 
