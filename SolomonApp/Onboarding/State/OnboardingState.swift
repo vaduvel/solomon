@@ -158,12 +158,14 @@ final class OnboardingState {
 
     // MARK: - Save final
 
-    /// Construiește UserProfile + obligații + goal și le salvează prin repositories.
+    /// Construiește UserProfile + obligații + goal și le salvează atomic.
     /// Apelat la finalul onboarding-ului (pas 8 → continue).
+    ///
+    /// FAZA A5: folosește OnboardingPersistence — totul într-o singură tranzacție
+    /// Core Data. Pe error: rollback automat → state consistent.  Doar dacă save-ul
+    /// reușește se setează `markCompleted` și se scriu chips/goal-text în UserDefaults.
     func persistFinalProfile(
-        userProfileRepository: any UserProfileRepository,
-        obligationRepository: any ObligationRepository,
-        goalRepository: any GoalRepository
+        onboardingPersistence: OnboardingPersistence
     ) throws {
         guard let salary = salaryRange, let bank = primaryBank else { return }
 
@@ -180,35 +182,37 @@ final class OnboardingState {
             primaryBank: bank
         )
         let profile = UserProfile(demographics: demographic, financials: financial)
-        try userProfileRepository.saveProfile(profile)
 
-        // Persist consents
         let consent = UserConsent(
             emailAccessGranted: gmailConnected,
             notificationsGranted: pushAllowed,
             datasetOptIn: trainingOptIn,
             onboardingComplete: true
         )
-        try userProfileRepository.saveConsent(consent)
 
-        // Obligații draft → Obligation
-        for d in draftObligations where !d.name.isEmpty && d.amountRON > 0 {
-            let obligation = Obligation(
-                id: UUID(),
-                name: d.name,
-                amount: Money(d.amountRON),
-                dayOfMonth: d.dayOfMonth,
-                kind: d.kind,
-                confidence: .declared,
-                since: Date()
-            )
-            try obligationRepository.upsert(obligation)
-        }
+        // Obligații draft → Obligation (filtrat: doar cele valide)
+        let obligations: [Obligation] = draftObligations
+            .filter { !$0.name.isEmpty && $0.amountRON > 0 }
+            .map { d in
+                Obligation(
+                    id: UUID(),
+                    name: d.name,
+                    amount: Money(d.amountRON),
+                    dayOfMonth: d.dayOfMonth,
+                    kind: d.kind,
+                    confidence: .declared,
+                    since: Date()
+                )
+            }
 
-        // Goal — doar dacă bigGoalText e completat (Goal cere amountTarget > 0,
-        // deci pentru free text fără sumă concretă, încă nu îl salvăm).
-        // Fazele viitoare vor adăuga Q&A pentru sumă/deadline.
-        // selectedGoals (chips) sunt salvate doar tematic în UserDefaults pentru analytics.
+        // ATOMIC: profile + consent + obligations într-o singură tranzacție
+        try onboardingPersistence.persistOnboardingFinal(
+            profile: profile,
+            consent: consent,
+            obligations: obligations
+        )
+
+        // Doar după succes: persistăm metadata în UserDefaults și marcăm complete
         let chipsRaw = selectedGoals.map { $0.rawValue }.joined(separator: "|")
         UserDefaults.standard.set(chipsRaw, forKey: "solomon.onboarding.selectedGoals")
         if !bigGoalText.isEmpty {

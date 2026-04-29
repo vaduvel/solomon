@@ -14,12 +14,16 @@ public struct SafeToSpendBudget: Sendable, Hashable, Codable {
     public var availablePerDayAfterBuffer: Money
     public var velocityRONPerDay: Money
     public var daysUntilCritical: Int?
+    /// FAZA C5: venitul lunar mediu (RON) — folosit pentru praguri relative
+    /// (isTight = perDay sub 1% din income). Optional pentru compat retro.
+    public var monthlyIncomeReference: Money?
 
     public init(currentBalance: Money, obligationsRemaining: Money,
                 availableAfterObligations: Money, bufferRecommended: Money,
                 availableAfterBuffer: Money, daysUntilNextPayday: Int,
                 availablePerDay: Money, availablePerDayAfterBuffer: Money,
-                velocityRONPerDay: Money, daysUntilCritical: Int?) {
+                velocityRONPerDay: Money, daysUntilCritical: Int?,
+                monthlyIncomeReference: Money? = nil) {
         self.currentBalance = currentBalance
         self.obligationsRemaining = obligationsRemaining
         self.availableAfterObligations = availableAfterObligations
@@ -30,11 +34,23 @@ public struct SafeToSpendBudget: Sendable, Hashable, Codable {
         self.availablePerDayAfterBuffer = availablePerDayAfterBuffer
         self.velocityRONPerDay = velocityRONPerDay
         self.daysUntilCritical = daysUntilCritical
+        self.monthlyIncomeReference = monthlyIncomeReference
     }
 
-    /// True dacă bugetul e foarte strâns (≤ 30 RON/zi sau ≤ 5 zile critice).
+    /// FAZA C5: True dacă bugetul e strâns RELATIV la venit.
+    ///
+    /// - Cu monthlyIncomeReference: prag = max(20 RON, 1% din venit/zi) →
+    ///   pentru 5000 RON → 50 RON/zi; pentru 2500 RON → 25 RON/zi
+    /// - Fără referință: fallback la pragul absolut de 30 RON/zi
+    /// - Plus: <= 5 zile până la critical = tight indiferent de prag
     public var isTight: Bool {
-        if availablePerDay.amount <= 30 { return true }
+        let threshold: Int
+        if let ref = monthlyIncomeReference, ref.amount > 0 {
+            threshold = max(20, ref.amount / 100)   // 1% din venit/lună ≈ 1%/zi
+        } else {
+            threshold = 30
+        }
+        if availablePerDay.amount <= threshold { return true }
         if let critical = daysUntilCritical, critical <= 5 { return true }
         return false
     }
@@ -89,11 +105,14 @@ public struct SafeToSpendCalculator: Sendable {
     ///   - obligationsRemaining: obligații care încă vin în această perioadă.
     ///   - daysUntilNextPayday: nr de zile până la următorul salariu.
     ///   - velocityRONPerDay: rata medie zilnică de cheltuieli (din CashFlow).
+    ///   - monthlyIncomeReference: venitul lunar mediu (FAZA C5) — folosit pentru
+    ///     pragul `isTight` relativ la venit. Optional, fallback la prag absolut.
     public func calculate(
         currentBalance: Money,
         obligationsRemaining: Money,
         daysUntilNextPayday: Int,
-        velocityRONPerDay: Money = Money(0)
+        velocityRONPerDay: Money = Money(0),
+        monthlyIncomeReference: Money? = nil
     ) -> SafeToSpendBudget {
         let safeDays = max(daysUntilNextPayday, 1)
         let afterObligations = currentBalance - obligationsRemaining
@@ -125,7 +144,8 @@ public struct SafeToSpendCalculator: Sendable {
             availablePerDay: perDay,
             availablePerDayAfterBuffer: perDayAfterBuffer,
             velocityRONPerDay: velocityRONPerDay,
-            daysUntilCritical: daysUntilCritical
+            daysUntilCritical: daysUntilCritical,
+            monthlyIncomeReference: monthlyIncomeReference
         )
     }
 }

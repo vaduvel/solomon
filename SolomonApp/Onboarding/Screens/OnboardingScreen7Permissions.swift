@@ -134,16 +134,31 @@ struct OnboardingScreen7Permissions: View {
     }
 
     private func requestPushPermission() async {
+        // FAZA B3: cerem și .criticalAlert pentru Spiral Alert / Upcoming Obligation
+        // ca să străbată Focus / Do Not Disturb. iOS poate respinge tăcut .criticalAlert
+        // dacă entitlement-ul nu e activ în portalul Apple — în acest caz cade la
+        // .alert standard, dar restul flow-ului rămâne neschimbat.
+        let options: UNAuthorizationOptions = [.alert, .sound, .badge, .criticalAlert]
         do {
             let granted = try await UNUserNotificationCenter.current()
-                .requestAuthorization(options: [.alert, .sound, .badge])
+                .requestAuthorization(options: options)
             state.pushAllowed = granted
             await MainActor.run {
                 granted ? Haptics.success() : Haptics.warning()
             }
         } catch {
-            state.pushAllowed = false
-            await MainActor.run { Haptics.error() }
+            // Dacă .criticalAlert e respins (entitlement lipsă), retry fără el.
+            do {
+                let granted = try await UNUserNotificationCenter.current()
+                    .requestAuthorization(options: [.alert, .sound, .badge])
+                state.pushAllowed = granted
+                await MainActor.run {
+                    granted ? Haptics.success() : Haptics.warning()
+                }
+            } catch {
+                state.pushAllowed = false
+                await MainActor.run { Haptics.error() }
+            }
         }
     }
 }

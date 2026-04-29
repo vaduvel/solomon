@@ -83,9 +83,14 @@ public struct SpiralDetector: Sendable {
 
         // Score ponderat: IFN și obligations>income sunt semnale critice (2 pts),
         // celelalte (balance declining, card credit, BNPL stacking) = 1 pt fiecare.
+        // FAZA B5: ifnActive primește weight 1 (nu 2) — un singur IFN istoric plătit
+        // la timp NU e spirală reală. Spirala reală se manifestă DOAR când ifnActive
+        // se combină cu alți factori toxici (balance declining, BNPL stacking, etc.).
+        // obligationsExceedIncome rămâne weight 2 — e blocant matematic indiferent.
         let weightedScore = factors.reduce(0) { acc, factor in
             switch factor.factor {
-            case .ifnActive, .obligationsExceedIncome: return acc + 2
+            case .obligationsExceedIncome: return acc + 2
+            case .ifnActive: return acc + 1
             default: return acc + 1
             }
         }

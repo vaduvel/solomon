@@ -1,4 +1,5 @@
 import Foundation
+import os
 import BackgroundTasks
 import UserNotifications
 import SolomonCore
@@ -78,7 +79,14 @@ final class BackgroundTaskService {
         let request = BGAppRefreshTaskRequest(identifier: Self.taskIdRefresh)
         // Minimum 3 ore — iOS poate întârzia mai mult
         request.earliestBeginDate = Date(timeIntervalSinceNow: 3 * 60 * 60)
-        try? BGTaskScheduler.shared.submit(request)
+        // FAZA C6: log explicit BGTaskScheduler errors. Eșecul aici e normal pe simulator
+        // (BGTaskSchedulerErrorDomain code 1) sau dacă userul a dezactivat BG App Refresh.
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            Logger.bgTask.debug("BG refresh task scheduled for \(request.earliestBeginDate?.description ?? "now", privacy: .public)")
+        } catch {
+            Logger.bgTask.warning("BG refresh submit failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private func scheduleWeekly() {
@@ -86,7 +94,12 @@ final class BackgroundTaskService {
         request.earliestBeginDate = nextSundayEvening()
         request.requiresNetworkConnectivity = false
         request.requiresExternalPower = false
-        try? BGTaskScheduler.shared.submit(request)
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            Logger.bgTask.debug("BG weekly task scheduled for \(request.earliestBeginDate?.description ?? "next Sunday", privacy: .public)")
+        } catch {
+            Logger.bgTask.warning("BG weekly submit failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private func nextSundayEvening() -> Date {
@@ -180,27 +193,42 @@ final class BackgroundTaskService {
         case .payday:
             content.title = "Salariul a intrat 💚"
             content.body = "Solomon a pregătit alocarea automată. Deschide app-ul să vezi."
+            content.interruptionLevel = .timeSensitive
         case .upcomingObligation:
             content.title = "Plată obligatorie se apropie ⏰"
             content.body = "Ai o obligație care scade în curând. Deschide Solomon să verifici."
+            // FAZA B3: time-sensitive ca să străbată Focus mode
+            content.interruptionLevel = .timeSensitive
         case .patternAlert:
             content.title = "Solomon a observat ceva"
             content.body = "Cheltuielile tale arată un pattern. Tap pentru detalii."
+            content.interruptionLevel = .active
         case .weeklySummary:
             content.title = "Rezumatul tău săptămânal 📊"
             content.body = "Cum a mers săptămâna financiar? Deschide Solomon să afli."
+            content.interruptionLevel = .passive
         case .spiralAlert:
             content.title = "Atenție — alertă financiară 🔴"
             content.body = "Solomon a detectat presiune financiară. Deschide app-ul acum."
+            // FAZA B3: spirala financiară ESTE urgență — folosim .critical dacă
+            // entitlement-ul e disponibil; iOS auto-degrade la .timeSensitive dacă nu.
+            content.interruptionLevel = .critical
+            content.sound = .defaultCriticalSound(withAudioVolume: 1.0)
         case .subscriptionAudit:
             content.title = "Abonamente nefolosite găsite 💸"
             content.body = "Poți recupera bani anulând abonamente fantomă. Tap să vezi."
+            content.interruptionLevel = .active
         default:
             return
         }
 
         let id = "solomon.bg.\(type.rawValue).\(Int(Date().timeIntervalSince1970))"
         let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
-        try? await center.add(request)
+        do {
+            try await center.add(request)
+        } catch {
+            // FAZA C6: log explicit în loc de try? silent
+            Logger.bgTask.error("Push notification add failed for \(type.rawValue, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 }

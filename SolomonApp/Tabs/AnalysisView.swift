@@ -7,7 +7,7 @@ import SolomonAnalytics
 // MARK: - AnalysisView (Tab 2 — Analiză)
 //
 // Prezintă breakdown-ul cheltuielilor pe categorii, trend lunar, și predicții.
-// Faza 10: layout complet cu date mock. Faza 11+: SolomonAnalytics real.
+// Wired la SolomonAnalytics (CashFlowAnalyzer, SpiralDetector).
 
 struct AnalysisView: View {
 

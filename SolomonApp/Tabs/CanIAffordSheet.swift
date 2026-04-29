@@ -295,11 +295,12 @@ struct CanIAffordSheet: View {
 
         let salaryMid = profile.financials.salaryRange.midpointRON
         let lastPayday: Date = {
+            // FAZA A2: safeDate clamp-uiește la ultima zi a lunii pentru paydayDay > daysInMonth
             if today >= paydayDay {
-                return cal.date(bySetting: .day, value: paydayDay, of: Date()) ?? Date()
+                return cal.safeDate(dayOfMonth: paydayDay, in: Date())
             }
             let lastMonth = cal.date(byAdding: .month, value: -1, to: Date()) ?? Date()
-            return cal.date(bySetting: .day, value: paydayDay, of: lastMonth) ?? lastMonth
+            return cal.safeDate(dayOfMonth: paydayDay, in: lastMonth)
         }()
         let spentSince = (try? txRepo.fetch(from: lastPayday, to: Date()))?
             .filter { $0.isOutgoing }

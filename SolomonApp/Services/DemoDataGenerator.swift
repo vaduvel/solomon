@@ -73,9 +73,9 @@ public enum DemoDataGenerator {
         for monthOffset in stride(from: 6, through: 0, by: -1) {
             guard let monthDate = cal.date(byAdding: .month, value: -monthOffset, to: now) else { continue }
 
-            // Salariu pe 28
-            if let salaryDate = cal.date(bySetting: .day, value: 28, of: monthDate),
-               salaryDate <= now {
+            // Salariu pe 28 (FAZA A2: safeDate clamp pentru luni scurte)
+            let salaryDate = cal.safeDate(dayOfMonth: 28, in: monthDate)
+            if salaryDate <= now {
                 allTransactions.append(Transaction(
                     date: salaryDate,
                     amount: Money(6200),
@@ -89,8 +89,8 @@ public enum DemoDataGenerator {
 
             // Cheltuieli recurente (chirie, utilități)
             for o in obligations {
-                if let dueDate = cal.date(bySetting: .day, value: o.dayOfMonth, of: monthDate),
-                   dueDate <= now {
+                let dueDate = cal.safeDate(dayOfMonth: o.dayOfMonth, in: monthDate)
+                if dueDate <= now {
                     let cat: TransactionCategory = o.kind == .utility ? .utilities : .rentMortgage
                     allTransactions.append(Transaction(
                         date: dueDate,
@@ -107,8 +107,8 @@ public enum DemoDataGenerator {
             // Subscriptions
             for s in subscriptions {
                 let renewDay = ((monthOffset * 7) + s.name.count) % 28 + 1
-                if let renewDate = cal.date(bySetting: .day, value: renewDay, of: monthDate),
-                   renewDate <= now {
+                let renewDate = cal.safeDate(dayOfMonth: renewDay, in: monthDate)
+                if renewDate <= now {
                     allTransactions.append(Transaction(
                         date: renewDate,
                         amount: s.amountMonthly,
@@ -124,7 +124,7 @@ public enum DemoDataGenerator {
             // Cheltuieli random per zi
             let daysInMonth = cal.range(of: .day, in: .month, for: monthDate)?.count ?? 30
             for day in 1...daysInMonth {
-                guard let dayDate = cal.date(bySetting: .day, value: day, of: monthDate) else { continue }
+                let dayDate = cal.safeDate(dayOfMonth: day, in: monthDate)
                 if dayDate > now { break }
 
                 // 60% șansă food delivery

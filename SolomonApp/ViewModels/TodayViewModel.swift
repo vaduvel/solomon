@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 import Observation
 import SolomonCore
 import SolomonStorage
@@ -27,6 +28,36 @@ final class TodayViewModel {
 
     var isBudgetTight: Bool = false
     var isLoadingMoment: Bool = false
+
+    // MARK: - Hero card display properties (v4 design)
+
+    var safeToSpendRON: Int = 0
+    var perDayRON: Int = 0
+    var spentThisMonthRON: Int = 0
+    var paydayDateFormatted: String = "—"
+    var daysUntilPayday: Int = 0
+    var safeToSpendStatus: String = "SIGUR"
+
+    /// Numărul formatat cu separator de mii românesc: "2.847"
+    var safeToSpendAmountFormatted: String {
+        guard safeToSpendRON > 0 else { return "..." }
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = "."
+        f.usesGroupingSeparator = true
+        f.maximumFractionDigits = 0
+        return f.string(from: NSNumber(value: safeToSpendRON)) ?? "\(safeToSpendRON)"
+    }
+
+    /// Formatare sumă RON cu separator de mii: "1.353 RON"
+    func formatRON(_ amount: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = "."
+        f.usesGroupingSeparator = true
+        f.maximumFractionDigits = 0
+        return (f.string(from: NSNumber(value: amount)) ?? "\(amount)") + " RON"
+    }
 
     // MARK: - Dependencies
 
@@ -90,6 +121,8 @@ final class TodayViewModel {
         guard let profile else {
             safeToSpendFormatted = "Adaugă date"
             perDayFormatted = "Setează profilul în Setări"
+            safeToSpendStatus = "—"
+            paydayDateFormatted = "—"
             return
         }
 
@@ -124,16 +157,26 @@ final class TodayViewModel {
             .filter { $0.isOutgoing } ?? []
         let velocity = last30.isEmpty ? 0 : last30.reduce(0) { $0 + $1.amount.amount } / 30
 
+        // FAZA C5: pasăm venitul declarat ca referință → isTight devine relativ
         let budget = safeToSpendCalc.calculate(
             currentBalance: Money(estimatedBalance),
             obligationsRemaining: Money(obligationsRemaining),
             daysUntilNextPayday: daysUntilNext,
-            velocityRONPerDay: Money(velocity)
+            velocityRONPerDay: Money(velocity),
+            monthlyIncomeReference: Money(salaryMid)
         )
 
         safeToSpendFormatted = RomanianMoneyFormatter.format(budget.availableAfterObligations)
         perDayFormatted = "≈ \(budget.availablePerDay.amount) RON/zi · \(daysUntilNext) zile rămase"
         isBudgetTight = budget.isTight
+
+        // v4 hero card properties
+        safeToSpendRON      = max(0, Int(budget.availableAfterObligations.amount))
+        perDayRON           = max(0, Int(budget.availablePerDay.amount))
+        spentThisMonthRON   = Int(spentSincePayday)
+        daysUntilPayday     = daysUntilNext
+        paydayDateFormatted = formatPaydayDate(paydayDay: paydayDay)
+        safeToSpendStatus   = budget.isTight ? "ATENȚIE" : "SIGUR"
     }
 
     // MARK: - Moment generation
@@ -177,20 +220,36 @@ final class TodayViewModel {
         } catch {
             // Fallback: arătăm un moment static minim cu greeting-ul
             currentMoment = nil
-            print("⚠️ Moment generation failed: \(error.localizedDescription)")
+            Logger.moments.error("Moment generation failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
     // MARK: - Helpers
 
+    private func formatPaydayDate(paydayDay: Int) -> String {
+        let cal = Calendar.current
+        let today = cal.component(.day, from: Date())
+        // FAZA A2: safeDate clamp-uiește dacă paydayDay > zilele lunii
+        let referenceDate: Date = paydayDay <= today
+            ? (cal.date(byAdding: .month, value: 1, to: Date()) ?? Date())
+            : Date()
+        let date = cal.safeDate(dayOfMonth: paydayDay, in: referenceDate)
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "ro_RO")
+        fmt.dateFormat = "d MMM"
+        return fmt.string(from: date)
+    }
+
     private func daysUntilDayOfMonth(_ targetDay: Int) -> Int {
         let cal = Calendar.current
         let today = cal.component(.day, from: Date())
-        if targetDay > today {
-            return targetDay - today
+        let daysInThisMonth = cal.range(of: .day, in: .month, for: Date())?.count ?? 30
+        // FAZA A2: clamp targetDay la zilele disponibile (29/30/31 → 28/30 după lună)
+        let clampedTarget = min(targetDay, daysInThisMonth)
+        if clampedTarget > today {
+            return clampedTarget - today
         } else {
-            let daysInMonth = cal.range(of: .day, in: .month, for: Date())?.count ?? 30
-            return daysInMonth - today + targetDay
+            return daysInThisMonth - today + clampedTarget
         }
     }
 
@@ -198,11 +257,12 @@ final class TodayViewModel {
         let cal = Calendar.current
         let today = cal.component(.day, from: Date())
         let now = Date()
+        // FAZA A2: safeDate clamp-uiește la ultima zi a lunii dacă payDay > daysInMonth
         if today >= payDay {
-            return cal.date(bySetting: .day, value: payDay, of: now) ?? now
+            return cal.safeDate(dayOfMonth: payDay, in: now)
         } else {
             let lastMonth = cal.date(byAdding: .month, value: -1, to: now) ?? now
-            return cal.date(bySetting: .day, value: payDay, of: lastMonth) ?? lastMonth
+            return cal.safeDate(dayOfMonth: payDay, in: lastMonth)
         }
     }
 

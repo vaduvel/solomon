@@ -180,18 +180,28 @@ public final class MomentEngine {
         let now = snapshot.referenceDate
         guard let cutoff = cal.date(byAdding: .hour, value: -48, to: now) else { return nil }
 
-        // Detectează o tranzacție incoming mare (salariu) în ultimele 48h
+        // FAZA B6: prag relativ la venitul declarat în profil. Hardcoded "≥1000 RON"
+        // declanșa Payday Magic la transferuri primite de la prieteni. Acum cerem
+        // ≥ 70% din salariul mid-point declarat (sau ≥ 70% din avgIncome) — astfel
+        // un transfer de 1.500 RON nu e confundat cu salariul de 8.000 RON.
+        let avgIncomeAmount = cashFlow.monthlyIncomeAvg.amount
+        let declaredMid = snapshot.userProfile?.financials.salaryRange.midpointRON ?? 0
+        let referenceIncome = max(avgIncomeAmount, declaredMid)
+        // Praguri:
+        //   - dacă avem un reference income, cerem ≥70% din el
+        //   - altfel fallback la 1500 RON (ridicat de la 1000 ca să taie zgomot mai bine)
+        let minSalaryRON: Int = referenceIncome > 0 ? Int(Double(referenceIncome) * 0.70) : 1500
+
         let recentIncoming = snapshot.transactions
-            .filter { $0.isIncoming && $0.date >= cutoff && $0.amount.amount >= 1000 }
+            .filter { $0.isIncoming && $0.date >= cutoff && $0.amount.amount >= minSalaryRON }
             .sorted { $0.amount.amount > $1.amount.amount }
             .first
 
         guard let salaryTx = recentIncoming else { return nil }
 
-        let avgIncome = cashFlow.monthlyIncomeAvg.amount
         let received = salaryTx.amount.amount
-        let isHigher = avgIncome > 0 && Double(received) > Double(avgIncome) * 1.10
-        let isLower  = avgIncome > 0 && Double(received) < Double(avgIncome) * 0.90
+        let isHigher = avgIncomeAmount > 0 && Double(received) > Double(avgIncomeAmount) * 1.10
+        let isLower  = avgIncomeAmount > 0 && Double(received) < Double(avgIncomeAmount) * 0.90
 
         let salary = PaydaySalary(
             amountReceived: salaryTx.amount,
@@ -230,7 +240,10 @@ public final class MomentEngine {
             availablePerDay: perDay
         )
 
-        // Comparație cu luna trecută: reconstructăm available-ul lunii precedente
+        // FAZA B7: comparație SIMETRICĂ — folosim DOAR tranzacțiile lunii precedente,
+        // fără să mai scădem obligTotal/subTotal-urile CURENȚI (bug original) care
+        // creau o comparație asimetrică artificială. Tranzacțiile recurente apar
+        // deja în prevOutgoing dacă au fost într-adevăr plătite luna trecută.
         let lastMonthAvailable: Money = {
             let cal = Calendar.current
             let now = snapshot.referenceDate
@@ -245,7 +258,7 @@ public final class MomentEngine {
             let prevOutgoing = snapshot.transactions
                 .filter { $0.isOutgoing && $0.date >= prevMonthStart && $0.date < prevMonthEnd }
                 .reduce(0) { $0 + $1.amount.amount }
-            let prevBalance = prevIncoming - prevOutgoing - obligTotal.amount - subTotal.amount
+            let prevBalance = prevIncoming - prevOutgoing
             return Money(max(0, prevBalance))
         }()
 
@@ -269,7 +282,7 @@ public final class MomentEngine {
             .map { (cat, amt) in CategoryBudgetSuggestion(category: cat, amount: amt, basedOn: .average) }
 
         var warnings: [PaydayWarning] = []
-        let oblRatio = avgIncome > 0 ? Double(obligTotal.amount) / Double(avgIncome) : 0
+        let oblRatio = avgIncomeAmount > 0 ? Double(obligTotal.amount) / Double(avgIncomeAmount) : 0
         if oblRatio > 0.5 {
             warnings.append(PaydayWarning(
                 type: .obligationsTooHigh,

@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 import Observation
 import SolomonCore
 import SolomonStorage
@@ -529,7 +530,8 @@ final class WalletViewModel {
     var subscriptions: [Subscription] = []
     var transactions: [SolomonCore.Transaction] = []
     /// Salariul real al userului — încărcat din UserProfile pentru calcule corecte.
-    private var salaryMidRON: Int = 5000
+    /// Fallback la SolomonDefaults dacă profilul lipsește încă (race onboarding ↔ wallet).
+    private var salaryMidRON: Int = SolomonDefaults.salaryMidpointFallbackRON
 
     private var transactionRepo: (any TransactionRepository)?
     private var obligationRepo: (any ObligationRepository)?
@@ -596,21 +598,38 @@ final class WalletViewModel {
     // MARK: - Delete helpers (apelate din swipeActions)
 
     func deleteObligation(id: UUID) {
-        try? obligationRepo?.delete(id: id)
-        obligations.removeAll { $0.id == id }
-        Haptics.success()
+        // FAZA C4: try? înghițea erori → user vedea UI-ul actualizat dar la relaunch
+        // item-ul reapărea. Acum: pe error rollback la in-memory state și warning haptic.
+        do {
+            try obligationRepo?.delete(id: id)
+            obligations.removeAll { $0.id == id }
+            Haptics.success()
+        } catch {
+            Logger.persistence.error("deleteObligation failed \(id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            Haptics.error()
+        }
     }
 
     func deleteSubscription(id: UUID) {
-        try? subscriptionRepo?.delete(id: id)
-        subscriptions.removeAll { $0.id == id }
-        Haptics.success()
+        do {
+            try subscriptionRepo?.delete(id: id)
+            subscriptions.removeAll { $0.id == id }
+            Haptics.success()
+        } catch {
+            Logger.persistence.error("deleteSubscription failed \(id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            Haptics.error()
+        }
     }
 
     func deleteTransaction(id: UUID) {
-        try? transactionRepo?.delete(id: id)
-        transactions.removeAll { $0.id == id }
-        Haptics.success()
+        do {
+            try transactionRepo?.delete(id: id)
+            transactions.removeAll { $0.id == id }
+            Haptics.success()
+        } catch {
+            Logger.persistence.error("deleteTransaction failed \(id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            Haptics.error()
+        }
     }
 }
 

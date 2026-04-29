@@ -1,5 +1,6 @@
 import Foundation
 import CoreData
+import os
 
 /// Stiva Core Data Solomon — model definit programatic (fără `.xcdatamodeld`),
 /// compatibil nativ cu Swift Package Manager.
@@ -51,17 +52,25 @@ public final class SolomonPersistenceController: @unchecked Sendable {
         c.loadPersistentStores { _, error in loadError = error }
 
         if let error = loadError {
-            // Migrarea automată a eșuat — store-ul e corupt sau incompatibil.
-            // Strategie: ștergem și recreăm (date pierdute, dar app-ul devine funcțional).
-            // Alternativa este un crash loop infinit, care e mai rău pentru un pilot.
-            #if DEBUG
-            print("⚠️ Solomon CoreData: store load failed (\(error)). Deleting and recreating...")
-            #endif
+            // FAZA B2: Migrarea automată a eșuat — păstrăm un BACKUP înainte să
+            // ștergem store-ul, ca să recuperabil datele financiare istorice
+            // (manual din Files dacă e nevoie). Apoi facem fallback la reset.
+            let logger = Logger(subsystem: "ro.solomon.app", category: "Persistence")
+            logger.error("CoreData store load failed: \(error.localizedDescription, privacy: .public). Backing up + recreating store.")
+
             if let storeURL = c.persistentStoreDescriptions.first?.url {
+                Self.backupCorruptedStore(at: storeURL, logger: logger)
                 let base = storeURL.deletingLastPathComponent()
-                let name  = storeURL.deletingPathExtension().lastPathComponent
+                let name = storeURL.deletingPathExtension().lastPathComponent
                 for ext in ["sqlite", "sqlite-shm", "sqlite-wal"] {
-                    try? FileManager.default.removeItem(at: base.appendingPathComponent("\(name).\(ext)"))
+                    let fileURL = base.appendingPathComponent("\(name).\(ext)")
+                    do {
+                        if FileManager.default.fileExists(atPath: fileURL.path) {
+                            try FileManager.default.removeItem(at: fileURL)
+                        }
+                    } catch {
+                        logger.error("Failed to remove store file \(fileURL.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                    }
                 }
             }
             c.loadPersistentStores { _, retryError in
@@ -74,6 +83,65 @@ public final class SolomonPersistenceController: @unchecked Sendable {
         c.viewContext.automaticallyMergesChangesFromParent = true
         c.viewContext.mergePolicy = NSMergePolicy.mergeByPropertyObjectTrump
         self.container = c
+    }
+
+    // MARK: - Backup helper (FAZA B2)
+
+    /// Copiază fișierele SQLite ale unui store corupt într-un folder de backup
+    /// timestamped, înainte de delete-on-fail. Permite recuperare manuală a datelor
+    /// financiare istorice (export din Files / Finder pe Mac).
+    ///
+    /// Backupurile sunt stocate în `Application Support/Solomon/CorruptStoreBackups/<timestamp>/`.
+    private static func backupCorruptedStore(at storeURL: URL, logger: Logger) {
+        let base = storeURL.deletingLastPathComponent()
+        let storeName = storeURL.deletingPathExtension().lastPathComponent
+        let fm = FileManager.default
+
+        do {
+            let appSupport = try fm.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+            let timestamp = ISO8601DateFormatter().string(from: Date())
+                .replacingOccurrences(of: ":", with: "-")
+            let backupDir = appSupport
+                .appendingPathComponent("Solomon", isDirectory: true)
+                .appendingPathComponent("CorruptStoreBackups", isDirectory: true)
+                .appendingPathComponent(timestamp, isDirectory: true)
+            try fm.createDirectory(at: backupDir, withIntermediateDirectories: true)
+
+            for ext in ["sqlite", "sqlite-shm", "sqlite-wal"] {
+                let src = base.appendingPathComponent("\(storeName).\(ext)")
+                if fm.fileExists(atPath: src.path) {
+                    let dst = backupDir.appendingPathComponent("\(storeName).\(ext)")
+                    try fm.copyItem(at: src, to: dst)
+                }
+            }
+
+            // Limităm la cel mult 5 backupuri ca să nu umflăm disk-ul user-ului
+            Self.pruneOldBackups(in: backupDir.deletingLastPathComponent(), keep: 5, logger: logger)
+
+            logger.notice("Backup corrupt store created at \(backupDir.path, privacy: .public)")
+        } catch {
+            logger.error("Backup of corrupt store FAILED: \(error.localizedDescription, privacy: .public). Proceeding with reset (data loss).")
+        }
+    }
+
+    private static func pruneOldBackups(in dir: URL, keep: Int, logger: Logger) {
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.creationDateKey]) else { return }
+        let sorted = contents.sorted { lhs, rhs in
+            let lDate = (try? lhs.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+            let rDate = (try? rhs.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+            return lDate > rDate   // newest first
+        }
+        if sorted.count > keep {
+            for url in sorted.dropFirst(keep) {
+                try? fm.removeItem(at: url)
+            }
+        }
     }
 
     // MARK: - Programmatic model

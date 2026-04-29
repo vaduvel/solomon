@@ -373,10 +373,10 @@ final class SettingsViewModel {
         let day = cal.component(.day, from: now)
         let renewMonth: Date
         if day <= 15 {
-            renewMonth = cal.date(bySetting: .day, value: 15, of: now) ?? now
+            renewMonth = cal.safeDate(dayOfMonth: 15, in: now)
         } else {
             let nextMonth = cal.date(byAdding: .month, value: 1, to: now) ?? now
-            renewMonth = cal.date(bySetting: .day, value: 15, of: nextMonth) ?? nextMonth
+            renewMonth = cal.safeDate(dayOfMonth: 15, in: nextMonth)
         }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ro_RO")

@@ -68,12 +68,22 @@ public enum BankNotificationParser {
             : MerchantCategoryMatcher.category(for: merchantClean)
         let direction = determineDirection(from: normalized, amount: extracted.amount)
 
-        // Money stochează sume ca Int RON (spec §6.1).
-        // Valutele non-RON sunt stocate la valoarea nominală (fără conversie) — v1 limitation.
+        // FAZA A1: doar tranzacțiile RON sunt stocate. Valutele non-RON returnează
+        // nil (v2 va adăuga conversie FX). Astfel nu poluăm Safe-to-Spend cu sume
+        // EUR/USD tratate fals ca RON.
+        guard extracted.currency == "RON" else { return nil }
+
         let moneyAmount = Money.fromRON(NSDecimalNumber(decimal: extracted.amount).doubleValue)
 
+        // FAZA A1: ID deterministic pe baza conținutului + minut.  Re-parse-ul
+        // aceleiași notificări produce același UUID → repository.upsert detectează
+        // duplicatul în loc să adauge un rând nou.
+        let bucketEpoch = Int(date.timeIntervalSince1970 / 60.0) // bucket de 1 minut
+        let dedupeKey = "notif|\(normalized)|\(bucketEpoch)"
+        let id = UUID.deterministic(from: dedupeKey)
+
         return Transaction(
-            id: UUID(),
+            id: id,
             date: date,
             amount: moneyAmount,
             direction: direction,

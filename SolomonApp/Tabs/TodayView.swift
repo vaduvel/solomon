@@ -46,6 +46,11 @@ struct TodayView: View {
                             MomentCard(moment: moment)
                                 .padding(.horizontal, SolSpacing.lg)
                         }
+                    } else {
+                        // FAZA B4: empty state pentru first launch (no moments yet) ca să
+                        // nu vadă userul un ecran cu "..." și niciun feedback. Userul nou
+                        // are aici un mesaj acțional cu CTA-uri către manual entry / shortcut.
+                        emptyMomentsState
                     }
 
                     // Recent moments history
@@ -227,6 +232,55 @@ struct TodayView: View {
                     }
                 )
                 .padding(.horizontal, SolSpacing.lg)
+        }
+    }
+
+    // MARK: - Empty moments state (FAZA B4)
+
+    @ViewBuilder
+    private var emptyMomentsState: some View {
+        VStack(alignment: .leading, spacing: SolSpacing.sm) {
+            Text("Solomon spune")
+                .solSectionHeader()
+                .padding(.horizontal, SolSpacing.lg)
+
+            VStack(spacing: SolSpacing.md) {
+                Image(systemName: "sparkles")
+                    .font(.title2)
+                    .foregroundStyle(Color.solPrimary)
+                    .symbolRenderingMode(.hierarchical)
+
+                Text("Solomon ascultă, dar are nevoie de date.")
+                    .font(.headline)
+                    .foregroundStyle(Color.solForeground)
+                    .multilineTextAlignment(.center)
+
+                Text("Adaugă manual prima ta tranzacție sau configurează Shortcut-ul ca să primesc automat notificările bancare. După câteva intrări, încep să-ți spun observații utile.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: SolSpacing.sm) {
+                    Button {
+                        Haptics.light()
+                        showManualEntry = true
+                    } label: {
+                        Label("Adaugă tranzacție", systemImage: "plus.circle.fill")
+                            .font(.footnote.weight(.semibold))
+                            .padding(.horizontal, SolSpacing.base)
+                            .padding(.vertical, SolSpacing.sm)
+                            .foregroundStyle(Color.solPrimary)
+                            .background(Color.solPrimary.opacity(0.12), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, SolSpacing.xs)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(SolSpacing.xl)
+            .solCard()
+            .padding(.horizontal, SolSpacing.lg)
         }
     }
 

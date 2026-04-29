@@ -33,12 +33,11 @@ import Foundation
         #expect(tx?.amount.amount == 1235)  // 1234.56 rotunjit la 1235 RON
     }
 
-    @Test func btPlataEUR() {
-        // EUR parsată — suma stocată nominal (fără conversie, v1 limitation)
+    @Test func btPlataEUR_skip() {
+        // FAZA A1/A4: tranzacțiile non-RON sunt SKIP-uite (returnează nil) ca să nu
+        // poluăm Safe-to-Spend cu sume EUR/USD tratate fals ca RON. v2 va aduce conversie FX.
         let tx = BankNotificationParser.parse(raw: "Plată 89,99 EUR la Amazon")
-        #expect(tx != nil)
-        #expect(tx?.amount.amount == 90)   // 89.99 rotunjit
-        #expect(tx?.description?.contains("EUR") == true)
+        #expect(tx == nil)
     }
 
     // MARK: - ING România
@@ -104,18 +103,19 @@ import Foundation
         #expect(tx?.direction == .outgoing)
     }
 
-    @Test func revolutCardPayment() {
-        let tx = BankNotificationParser.parse(raw: "Card payment 89.99 EUR at Netflix")
-        #expect(tx != nil)
-        #expect(tx?.amount.amount == 90)   // 89.99 rotunjit, EUR stocat în description
-        #expect(tx?.category == .subscriptions)
-        #expect(tx?.description?.contains("EUR") == true)
+    @Test func revolutCardPayment_EUR_skip() {
+        // FAZA A1/A4: EUR e skip-uit. Pentru same merchant în RON, tranzacția e procesată.
+        let txEUR = BankNotificationParser.parse(raw: "Card payment 89.99 EUR at Netflix")
+        #expect(txEUR == nil)
+
+        let txRON = BankNotificationParser.parse(raw: "Card payment 89,99 RON at Netflix")
+        #expect(txRON != nil)
+        #expect(txRON?.category == .subscriptions)
     }
 
-    @Test func revolutPlataEUR() {
+    @Test func revolutPlataEUR_skip() {
         let tx = BankNotificationParser.parse(raw: "Plată 45 EUR - Starbucks")
-        #expect(tx != nil)
-        #expect(tx?.description?.contains("EUR") == true)
+        #expect(tx == nil)
     }
 
     // MARK: - CEC Bank
@@ -313,5 +313,30 @@ import Foundation
         #expect(MerchantCategoryMatcher.category(for: "NETFLIX") == .subscriptions)
         #expect(MerchantCategoryMatcher.category(for: "glovo") == .foodDelivery)
         #expect(MerchantCategoryMatcher.category(for: "KAUFLAND") == .foodGrocery)
+    }
+
+    // MARK: - FAZA A1: Deterministic ID + deduplication
+
+    @Test func deterministicID_sameContent_sameUUID() {
+        // Aceeași notificare la același minut → același UUID (deduplication ready)
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let tx1 = BankNotificationParser.parse(raw: "Plată 65,00 RON la Glovo", date: date)
+        let tx2 = BankNotificationParser.parse(raw: "Plată 65,00 RON la Glovo", date: date)
+        #expect(tx1?.id == tx2?.id)
+    }
+
+    @Test func deterministicID_differentMinutes_differentUUID() {
+        let dateA = Date(timeIntervalSince1970: 1_700_000_000)
+        let dateB = Date(timeIntervalSince1970: 1_700_000_120) // +2 min
+        let tx1 = BankNotificationParser.parse(raw: "Plată 65,00 RON la Glovo", date: dateA)
+        let tx2 = BankNotificationParser.parse(raw: "Plată 65,00 RON la Glovo", date: dateB)
+        #expect(tx1?.id != tx2?.id)
+    }
+
+    @Test func deterministicID_differentContent_differentUUID() {
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let tx1 = BankNotificationParser.parse(raw: "Plată 65,00 RON la Glovo", date: date)
+        let tx2 = BankNotificationParser.parse(raw: "Plată 65,00 RON la Lidl", date: date)
+        #expect(tx1?.id != tx2?.id)
     }
 }

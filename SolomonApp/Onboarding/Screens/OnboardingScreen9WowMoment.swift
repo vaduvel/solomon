@@ -209,7 +209,7 @@ struct OnboardingScreen9WowMoment: View {
 
     private var dynamicInsights: [InsightItem] {
         var items: [InsightItem] = []
-        let salary = state.salaryRange?.midpointRON ?? 5000
+        let salary = state.salaryRange?.midpointRON ?? SolomonDefaults.salaryMidpointFallbackRON
 
         // 1. IFN / BNPL check
         let hasIFN = state.draftObligations.contains { $0.kind == .loanIFN || $0.kind == .bnpl }
@@ -263,7 +263,7 @@ struct OnboardingScreen9WowMoment: View {
     }
 
     private var safeToSpendValue: Int {
-        let salary = state.salaryRange?.midpointRON ?? 5000
+        let salary = state.salaryRange?.midpointRON ?? SolomonDefaults.salaryMidpointFallbackRON
         let obligations = state.draftObligations.reduce(0) { $0 + $1.amountRON }
         // Estimare simplă: venit - obligații fixe declarate.
         // Nu deducem cheltuieli variabile (nu le știm încă) — Safe to Spend real

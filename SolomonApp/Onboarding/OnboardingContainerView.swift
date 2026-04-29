@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 import SolomonStorage
 
 // MARK: - OnboardingContainerView
@@ -94,23 +95,21 @@ struct OnboardingContainerView: View {
     // MARK: - Final save
 
     private func handleFinish() {
+        // FAZA A5: salvare ATOMICĂ via OnboardingPersistence.
+        // Dacă pică Core Data: rollback automat, NU mai marcăm completed → userul
+        // poate retry-ui (alternativ ar fi un onboarding zombie cu date corupte).
         let context = SolomonPersistenceController.shared.container.viewContext
-        let userRepo = CoreDataUserProfileRepository(context: context)
-        let oblRepo = CoreDataObligationRepository(context: context)
-        let goalRepo = CoreDataGoalRepository(context: context)
+        let persistence = OnboardingPersistence(context: context)
 
         do {
-            try state.persistFinalProfile(
-                userProfileRepository: userRepo,
-                obligationRepository: oblRepo,
-                goalRepository: goalRepo
-            )
+            try state.persistFinalProfile(onboardingPersistence: persistence)
             onFinish()
         } catch {
-            // Pe error: marcăm completed oricum, ca să nu blocăm userul.
-            // În producție: log la analytics + retry mechanism.
-            print("⚠️ Onboarding save failed: \(error.localizedDescription)")
-            OnboardingState.markCompleted()
+            // Save eșuat — context.rollback() a curățat deja toate scrierile parțiale.
+            // NU marcăm completed: userul rămâne în onboarding și poate apăsa Continuă din nou.
+            Logger.onboarding.error("Onboarding save failed: \(error.localizedDescription, privacy: .public)")
+            // Pentru moment: tot apelăm onFinish ca să nu blocăm — dar fără markCompleted,
+            // următorul launch va re-arăta onboarding-ul.
             onFinish()
         }
     }
