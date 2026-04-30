@@ -56,6 +56,7 @@ final class OnboardingState {
 
     var name: String = ""
     var addressing: Addressing = .tu
+    var ageRange: AgeRange = .range25to35
 
     // MARK: - Ecran 3 — Venit
 
@@ -102,6 +103,12 @@ final class OnboardingState {
         case saveMonthly      = "Să economisesc lunar"
         case understandWhere  = "Să înțeleg unde se duc banii"
     }
+
+    // First goal — kind/target/deadline (Solomon DS goal-edit flow)
+    var firstGoalKind: GoalKind = .vacation
+    var firstGoalDestination: String = ""
+    var firstGoalTargetText: String = ""
+    var firstGoalDeadline: Date = Calendar.current.date(byAdding: .month, value: 6, to: Date()) ?? Date()
 
     // MARK: - Ecran 7 — Permisiuni
 
@@ -172,7 +179,7 @@ final class OnboardingState {
         let demographic = DemographicProfile(
             name: name.trimmingCharacters(in: .whitespaces),
             addressing: addressing,
-            ageRange: .range25to35   // default — inferat ulterior
+            ageRange: ageRange
         )
         let financial = FinancialProfile(
             salaryRange: salary,

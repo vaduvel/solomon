@@ -1,17 +1,17 @@
 import SwiftUI
 import SolomonCore
 
-// MARK: - IngestionToast
+// MARK: - IngestionToast (Claude Design v3 — premium glass capsule)
 //
-// Banner mint care apare jos pe ecran când o tranzacție nouă e parsată
-// dintr-o notificare bancară (via iOS Shortcuts).
+// Toast care apare jos pe ecran când o tranzacție nouă e parsată dintr-o
+// notificare bancară (via iOS Shortcuts).
 //
-// Auto-dismiss după 3.5s. Tap → dismiss instant.
+// Design: capsule glass .ultraThinMaterial cu border mint .25, padding 12-16,
+// icon checkmark.circle.fill mint stânga + text "Tranzacție X RON salvată" +
+// mic dismiss "x" dreapta. Slide-in-from-bottom cu spring + auto-dismiss 3s.
 //
-// Utilizare:
-//   .overlay(alignment: .bottom) {
-//       IngestionToast(transaction: lastIngested) { onDismiss }
-//   }
+// API public PĂSTRAT — `IngestionToast(transaction:onDismiss:)` și modifier
+// `.ingestionToast(transaction:autoDismissAfter:)` rămân la fel.
 
 struct IngestionToast: View {
 
@@ -23,70 +23,90 @@ struct IngestionToast: View {
     // MARK: - Body
 
     var body: some View {
-        HStack(spacing: SolSpacing.md) {
+        HStack(spacing: 12) {
+            // Icon checkmark mint cu glow
             ZStack {
                 Circle()
-                    .fill(Color.solMint.opacity(0.2))
-                    .frame(width: 36, height: 36)
-                Image(systemName: directionIcon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color.solMint)
+                    .fill(Color.solMintExact.opacity(0.12))
+                    .overlay(
+                        Circle().stroke(Color.solMintExact.opacity(0.4), lineWidth: 1)
+                    )
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Color.solMintExact)
+                    .shadow(color: Color.solMintExact.opacity(0.5), radius: 4)
             }
+            .frame(width: 32, height: 32)
 
-            VStack(alignment: .leading, spacing: 2) {
+            // Text body
+            VStack(alignment: .leading, spacing: 1) {
                 Text(headline)
-                    .font(.solBodyBold)
-                    .foregroundStyle(Color.solTextPrimary)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.white)
                     .lineLimit(1)
                 Text(detail)
-                    .font(.solCaption)
-                    .foregroundStyle(Color.solTextSecondary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.white.opacity(0.55))
                     .lineLimit(1)
             }
 
-            Spacer()
+            Spacer(minLength: 8)
 
-            Text(amountString)
-                .font(.solMonoMD)
-                .foregroundStyle(transaction.isIncoming ? Color.solMint : Color.solTextPrimary)
+            // Dismiss small "x"
+            Button {
+                onDismiss()
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.06))
+                        .overlay(
+                            Circle().stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        )
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.7))
+                }
+                .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
         }
-        .padding(.horizontal, SolSpacing.md)
-        .padding(.vertical, SolSpacing.sm)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
         .background(
-            RoundedRectangle(cornerRadius: SolRadius.lg, style: .continuous)
-                .fill(Color.solElevated)
-                .shadow(color: Color.black.opacity(0.4), radius: 12, x: 0, y: 4)
+            LinearGradient(
+                colors: [Color.solMintExact.opacity(0.06), Color.white.opacity(0.02)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
         )
+        .clipShape(Capsule(style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: SolRadius.lg)
-                .stroke(Color.solMint.opacity(0.3), lineWidth: 1)
+            Capsule(style: .continuous)
+                .stroke(Color.solMintExact.opacity(0.25), lineWidth: 1)
         )
-        .padding(.horizontal, SolSpacing.screenHorizontal)
+        .shadow(color: Color.black.opacity(0.4), radius: 16, x: 0, y: 6)
+        .shadow(color: Color.solMintExact.opacity(0.18), radius: 20, x: 0, y: 4)
+        .padding(.horizontal, 16)
         .onTapGesture { onDismiss() }
-        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .transition(
+            .move(edge: .bottom)
+                .combined(with: .opacity)
+                .combined(with: .scale(scale: 0.92, anchor: .bottom))
+        )
     }
 
     // MARK: - Computed
 
-    private var directionIcon: String {
-        transaction.isIncoming ? "arrow.down.left" : "arrow.up.right"
-    }
-
     private var headline: String {
-        if let merchant = transaction.merchant {
-            return merchant
-        }
-        return transaction.isIncoming ? "Sumă primită" : "Plată"
+        "Tranzacție \(transaction.amount.amount) RON salvată"
     }
 
     private var detail: String {
-        let category = transaction.category.displayNameRO
-        return "\(category) · acum"
-    }
-
-    private var amountString: String {
-        let sign = transaction.isOutgoing ? "-" : "+"
-        return "\(sign)\(transaction.amount.amount) RON"
+        if let merchant = transaction.merchant {
+            return "\(merchant) · \(transaction.category.displayNameRO)"
+        }
+        return transaction.category.displayNameRO
     }
 }
 
@@ -94,28 +114,31 @@ struct IngestionToast: View {
 
 extension View {
     /// Afișează un IngestionToast la fundul ecranului când vine o tranzacție nouă.
+    /// Auto-dismiss după 3s cu animație spring slide-in-from-bottom.
     func ingestionToast(
         transaction: Binding<SolomonCore.Transaction?>,
-        autoDismissAfter seconds: TimeInterval = 3.5
+        autoDismissAfter seconds: TimeInterval = 3.0
     ) -> some View {
         self.overlay(alignment: .bottom) {
             if let tx = transaction.wrappedValue {
                 IngestionToast(transaction: tx) {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) {
                         transaction.wrappedValue = nil
                     }
                 }
-                .padding(.bottom, SolSpacing.xl)
+                .padding(.bottom, 64)
                 .task(id: tx.id) {
                     try? await Task.sleep(for: .seconds(seconds))
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) {
                         transaction.wrappedValue = nil
                     }
                 }
             }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.85),
-                   value: transaction.wrappedValue?.id)
+        .animation(
+            .spring(response: 0.4, dampingFraction: 0.82),
+            value: transaction.wrappedValue?.id
+        )
     }
 }
 
@@ -123,21 +146,25 @@ extension View {
 
 #Preview {
     ZStack {
-        Color.solCanvas.ignoresSafeArea()
-        IngestionToast(
-            transaction: SolomonCore.Transaction(
-                id: UUID(),
-                date: Date(),
-                amount: Money(65),
-                direction: .outgoing,
-                category: .foodDelivery,
-                merchant: "Glovo",
-                description: nil,
-                source: .notificationParsed,
-                categorizationConfidence: 0.85
-            ),
-            onDismiss: {}
-        )
+        Color.solCanvasDark.ignoresSafeArea()
+        VStack {
+            Spacer()
+            IngestionToast(
+                transaction: SolomonCore.Transaction(
+                    id: UUID(),
+                    date: Date(),
+                    amount: Money(65),
+                    direction: .outgoing,
+                    category: .foodDelivery,
+                    merchant: "Glovo",
+                    description: nil,
+                    source: .notificationParsed,
+                    categorizationConfidence: 0.85
+                ),
+                onDismiss: {}
+            )
+            .padding(.bottom, 40)
+        }
     }
     .preferredColorScheme(.dark)
 }

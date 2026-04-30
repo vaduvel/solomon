@@ -1,9 +1,12 @@
 import SwiftUI
 
-// MARK: - State Views (Apple HIG aligned)
+// MARK: - State Views (Claude Design v3 — premium glass)
 //
-// Reutilizabile pentru toate ecranele Solomon: empty / loading / error.
-// Pattern: icon mare + title + subtitle + optional CTA, centered vertical.
+// Empty / Loading / Error state views — glass card cu icon mare în container
+// colorat (38×38 rounded sq + border) + titlu + subtitle muted + opțional CTA.
+//
+// API public PĂSTRAT (EmptyStateView/CTA, LoadingStateView, ErrorStateView,
+// InlineErrorText) — call site-urile existente continuă să compileze.
 
 // MARK: - EmptyStateView
 
@@ -33,35 +36,13 @@ public struct EmptyStateView: View {
     }
 
     public var body: some View {
-        VStack(spacing: SolSpacing.base) {
-            Image(systemName: icon)
-                .font(.system(size: 48, weight: .light))
-                .foregroundStyle(.tertiary)
-                .symbolRenderingMode(.hierarchical)
-
-            VStack(spacing: SolSpacing.sm) {
-                Text(title)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(Color.solForeground)
-                    .multilineTextAlignment(.center)
-
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            if let cta {
-                SolomonButton(cta.title, style: .secondary, icon: cta.icon, action: cta.action)
-                    .padding(.top, SolSpacing.sm)
-                    .padding(.horizontal, SolSpacing.xxl)
-            }
-        }
-        .padding(SolSpacing.xl)
-        .frame(maxWidth: .infinity)
+        SolStateCard(
+            icon: icon,
+            title: title,
+            subtitle: subtitle,
+            accent: .mint,
+            cta: cta
+        )
     }
 }
 
@@ -77,26 +58,57 @@ public struct LoadingStateView: View {
     }
 
     public var body: some View {
-        VStack(spacing: SolSpacing.base) {
-            ProgressView()
-                .progressViewStyle(.circular)
-                .controlSize(.large)
-                .tint(Color.solPrimary)
+        VStack(spacing: 16) {
+            // Icon container mint cu ProgressView mare
+            ZStack {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(SolAccent.mint.iconGradient)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .stroke(Color.solMintExact.opacity(0.4), lineWidth: 1)
+                    )
+                    .frame(width: 56, height: 56)
+                    .shadow(color: Color.solMintExact.opacity(0.25), radius: 12)
 
-            if let title {
-                Text(title)
-                    .font(.headline)
-                    .foregroundStyle(Color.solForeground)
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .controlSize(.large)
+                    .tint(.solMintExact)
             }
-            if let subtitle {
-                Text(subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+            .padding(.bottom, 4)
+
+            VStack(spacing: 6) {
+                if let title {
+                    Text(title)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .multilineTextAlignment(.center)
+                }
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.white.opacity(0.55))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
-        .padding(SolSpacing.xl)
+        .padding(24)
         .frame(maxWidth: .infinity)
+        .background(
+            LinearGradient(
+                colors: [Color.white.opacity(0.04), Color.white.opacity(0.02)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .background(.ultraThinMaterial.opacity(0.55))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.07), lineWidth: 1)
+        )
+        .padding(.horizontal, 16)
     }
 }
 
@@ -118,35 +130,16 @@ public struct ErrorStateView: View {
     }
 
     public var body: some View {
-        VStack(spacing: SolSpacing.base) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 48, weight: .light))
-                .foregroundStyle(Color.solWarning)
-                .symbolRenderingMode(.hierarchical)
-
-            VStack(spacing: SolSpacing.sm) {
-                Text(title)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(Color.solForeground)
-                    .multilineTextAlignment(.center)
-
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            if let retryAction {
-                SolomonButton("Reîncearcă", style: .secondary, icon: "arrow.clockwise", action: retryAction)
-                    .padding(.top, SolSpacing.sm)
-                    .padding(.horizontal, SolSpacing.xxl)
-            }
+        let cta: EmptyStateView.CTA? = retryAction.map { action in
+            EmptyStateView.CTA(title: "Reîncearcă", icon: "arrow.clockwise", action: action)
         }
-        .padding(SolSpacing.xl)
-        .frame(maxWidth: .infinity)
+        SolStateCard(
+            icon: "xmark.octagon.fill",
+            title: title,
+            subtitle: subtitle,
+            accent: .rose,
+            cta: cta
+        )
     }
 }
 
@@ -160,15 +153,84 @@ public struct InlineErrorText: View {
     }
 
     public var body: some View {
-        HStack(spacing: SolSpacing.xs) {
+        HStack(spacing: 4) {
             Image(systemName: "exclamationmark.circle.fill")
-                .font(.footnote)
-                .foregroundStyle(Color.solDestructive)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.solRoseExact)
             Text(message)
-                .font(.footnote)
-                .foregroundStyle(Color.solDestructive)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.solRoseExact)
             Spacer()
         }
+    }
+}
+
+// MARK: - SolStateCard (shared glass card)
+
+/// Internal — împărțit între EmptyStateView și ErrorStateView.
+fileprivate struct SolStateCard: View {
+    let icon: String
+    let title: String
+    let subtitle: String?
+    let accent: SolAccent
+    let cta: EmptyStateView.CTA?
+
+    var body: some View {
+        VStack(spacing: 16) {
+            // Icon container 38×38 colorat cu border accent
+            ZStack {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(accent.iconGradient)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .stroke(accent.color.opacity(0.4), lineWidth: 1)
+                    )
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(accent.color)
+            }
+            .frame(width: 38, height: 38)
+            .shadow(color: accent.color.opacity(0.2), radius: 12)
+
+            VStack(spacing: 6) {
+                Text(title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .multilineTextAlignment(.center)
+
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.white.opacity(0.55))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .lineSpacing(2)
+                }
+            }
+
+            if let cta {
+                SolPrimaryButton(cta.title, accent: accent, fullWidth: true) {
+                    cta.action()
+                }
+                .padding(.top, 4)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(
+            LinearGradient(
+                colors: [Color.white.opacity(0.04), Color.white.opacity(0.02)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .background(.ultraThinMaterial.opacity(0.55))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .padding(.horizontal, 16)
     }
 }
 
@@ -176,9 +238,9 @@ public struct InlineErrorText: View {
 
 #Preview {
     ZStack {
-        Color.solCanvas.ignoresSafeArea()
+        Color.solCanvasDark.ignoresSafeArea()
         ScrollView {
-            VStack(spacing: SolSpacing.xxxl) {
+            VStack(spacing: 24) {
                 EmptyStateView(
                     icon: "tray",
                     title: "Nicio tranzacție",
@@ -195,9 +257,9 @@ public struct InlineErrorText: View {
                 )
 
                 InlineErrorText("Numele e obligatoriu")
-                    .padding(.horizontal, SolSpacing.base)
+                    .padding(.horizontal, 16)
             }
-            .padding(.vertical)
+            .padding(.vertical, 24)
         }
     }
     .preferredColorScheme(.dark)

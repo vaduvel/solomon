@@ -11,7 +11,7 @@ struct BankPicker: View {
     @Binding var selectedBank: Bank?
 
     private let primaryBanks: [Bank] = [
-        .bancaTransilvania, .bcr, .ing, .raiffeisen, .revolut, .other
+        .bancaTransilvania, .bcr, .ing, .raiffeisen, .brd, .revolut, .other
     ]
 
     var body: some View {
@@ -77,6 +77,7 @@ private struct BankCard: View {
         case .bcr:               return Color(hex: "#FF3B6D")  // BCR roșu
         case .ing:               return Color(hex: "#FF6B35")  // ING portocaliu
         case .raiffeisen:        return Color(hex: "#FFD700")  // Raiff galben
+        case .brd:               return Color(hex: "#FF3B30")  // BRD roșu
         case .revolut:           return Color.solCyan          // Revolut albastru
         case .other:             return Color.solMuted
         default:                 return Color.solPrimary
@@ -89,6 +90,7 @@ private struct BankCard: View {
         case .bcr:               return "BCR"
         case .ing:               return "ING"
         case .raiffeisen:        return "R"
+        case .brd:               return "BRD"
         case .revolut:           return "R"
         case .other:             return "•"
         default:                 return String(bank.displayNameRO.prefix(2))

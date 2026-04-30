@@ -1,23 +1,29 @@
 import SwiftUI
 
-// MARK: - SolomonButton (Apple HIG strict — Faza 28)
+// MARK: - SolomonButton (Claude Design v3 — pill capsule, gradient mint)
 //
-// Refactor: folosim DIRECT iOS native button styles via `.buttonStyle()`,
-// fără custom views. Brandul Solomon vine prin `.tint(.solPrimary)` și
-// gradient e folosit DOAR ca opțiune explicită pentru hero CTAs.
+// API public PĂSTRAT — toate cele 5 stiluri (primary, secondary, danger, ghost,
+// heroGradient) rămân disponibile cu aceeași semnătură. Vizualul intern e
+// reconstruit cu pattern din SolPrimaryButton/SolSecondaryButton:
+//   - .primary / .heroGradient → pill capsule, gradient mint→deep,
+//     shadow .solMintExact.opacity(0.4) radius 12, border white .20 inset
+//   - .secondary → glass pill, bg white .04, border white .10, fg white .70
+//   - .danger → pill capsule rose gradient
+//   - .ghost → text plain mint
+//   - Loading state cu ProgressView tint .solMintExact
 
 public struct SolomonButton: View {
 
     public enum Style {
-        /// Native `.borderedProminent` cu solPrimary tint — DEFAULT pentru CTA
+        /// Primary CTA — pill capsule mint gradient
         case primary
-        /// Native `.bordered` cu solPrimary tint
+        /// Secondary — glass pill subtle
         case secondary
-        /// Native `.borderedProminent` cu .red tint — destructive actions
+        /// Destructive — pill capsule rose gradient
         case danger
-        /// Native `.plain` (text only)
+        /// Plain text mint
         case ghost
-        /// Hero gradient mint→cyan — DOAR pentru CTA-uri hero (Welcome, CanIAfford big card)
+        /// Hero gradient mint→deep — alias semantic pt CTA-uri hero (Welcome, CanIAfford big card)
         case heroGradient
     }
 
@@ -49,80 +55,106 @@ public struct SolomonButton: View {
             action()
         } label: {
             label
+                .frame(maxWidth: .infinity, minHeight: 50)
+                .padding(.horizontal, 18)
+                .background(backgroundView)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(borderView)
+                .shadow(color: shadowColor, radius: shadowRadius, x: 0, y: 4)
         }
-        .modifier(StyleModifier(style: style))
-        .controlSize(.large)
+        .buttonStyle(SolomonScaleButtonStyle())
         .disabled(isLoading)
         .sensoryFeedback(.impact(weight: .medium), trigger: triggerHaptic)
     }
 
     @ViewBuilder
     private var label: some View {
-        HStack(spacing: SolSpacing.sm) {
+        HStack(spacing: 8) {
             if isLoading {
                 ProgressView()
                     .progressViewStyle(.circular)
                     .controlSize(.small)
-            }
-            if let icon, !isLoading {
+                    .tint(.solMintExact)
+            } else if let icon {
                 Image(systemName: icon)
-                    .font(.body.weight(.semibold))
+                    .font(.system(size: 15, weight: .semibold))
             }
             Text(title)
-                .font(.body.weight(.semibold))
+                .font(.system(size: 15, weight: .semibold))
         }
-        .frame(maxWidth: .infinity)
+        .foregroundStyle(foregroundColor)
+        .opacity(isLoading ? 0.7 : 1.0)
     }
-}
 
-// MARK: - Style modifier
+    // MARK: - Per-style background / border / shadow
 
-private struct StyleModifier: ViewModifier {
-    let style: SolomonButton.Style
-
-    func body(content: Content) -> some View {
+    @ViewBuilder
+    private var backgroundView: some View {
         switch style {
-        case .primary:
-            content
-                .buttonStyle(.borderedProminent)
-                .tint(Color.solPrimary)
-                .foregroundStyle(Color.solCanvas)
-
+        case .primary, .heroGradient:
+            SolAccent.mint.primaryButtonGradient
         case .secondary:
-            content
-                .buttonStyle(.bordered)
-                .tint(Color.solPrimary)
-
+            Color.white.opacity(0.04)
+                .background(.ultraThinMaterial.opacity(0.4))
         case .danger:
-            content
-                .buttonStyle(.borderedProminent)
-                .tint(Color.solDestructive)
-                .foregroundStyle(.white)
-
+            SolAccent.rose.primaryButtonGradient
         case .ghost:
-            content
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.solPrimary)
+            Color.clear
+        }
+    }
 
-        case .heroGradient:
-            content
-                .buttonStyle(HeroGradientButtonStyle())
+    @ViewBuilder
+    private var borderView: some View {
+        switch style {
+        case .primary, .heroGradient, .danger:
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.20), lineWidth: 1)
+                .blendMode(.plusLighter)
+        case .secondary:
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+        case .ghost:
+            EmptyView()
+        }
+    }
+
+    private var foregroundColor: Color {
+        switch style {
+        case .primary, .heroGradient:
+            return Color(red: 0x05/255, green: 0x2E/255, blue: 0x16/255)
+        case .secondary:
+            return Color.white.opacity(0.7)
+        case .danger:
+            return Color.white
+        case .ghost:
+            return Color.solMintExact
+        }
+    }
+
+    private var shadowColor: Color {
+        switch style {
+        case .primary, .heroGradient:
+            return Color.solMintExact.opacity(0.4)
+        case .danger:
+            return Color.solRoseExact.opacity(0.4)
+        case .secondary, .ghost:
+            return .clear
+        }
+    }
+
+    private var shadowRadius: CGFloat {
+        switch style {
+        case .primary, .heroGradient, .danger: return 12
+        case .secondary, .ghost:               return 0
         }
     }
 }
 
-// MARK: - Hero gradient style (DOAR pentru hero CTAs)
+// MARK: - Press scale
 
-private struct HeroGradientButtonStyle: ButtonStyle {
+private struct SolomonScaleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .padding(.horizontal, SolSpacing.lg)
-            .frame(maxWidth: .infinity, minHeight: 50)
-            .foregroundStyle(Color.solCanvas)
-            .background(LinearGradient.solPrimaryCTA)
-            .clipShape(RoundedRectangle(cornerRadius: SolRadius.lg, style: .continuous))
-            .shadow(color: Color.solPrimary.opacity(configuration.isPressed ? 0.20 : 0.30),
-                    radius: 12, x: 0, y: 4)
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
             .animation(.snappy(duration: 0.15), value: configuration.isPressed)
     }
@@ -132,8 +164,8 @@ private struct HeroGradientButtonStyle: ButtonStyle {
 
 #Preview {
     ZStack {
-        Color.solCanvas.ignoresSafeArea()
-        VStack(spacing: SolSpacing.md) {
+        Color.solCanvasDark.ignoresSafeArea()
+        VStack(spacing: 12) {
             SolomonButton("Continuă", icon: "arrow.right") {}
             SolomonButton("Anulează abonamentul", style: .secondary, icon: "xmark") {}
             SolomonButton("Loading...", isLoading: true) {}
@@ -141,7 +173,7 @@ private struct HeroGradientButtonStyle: ButtonStyle {
             SolomonButton("Mai târziu", style: .ghost) {}
             SolomonButton("Hero CTA", style: .heroGradient, icon: "sparkles") {}
         }
-        .padding(SolSpacing.base)
+        .padding(16)
     }
     .preferredColorScheme(.dark)
 }

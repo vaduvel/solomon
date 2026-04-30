@@ -1,9 +1,12 @@
 import SwiftUI
 
-// MARK: - MomentCard
+// MARK: - MomentCard (Claude Design v3 — premium glass)
 //
 // Cardul principal Solomon — afișează răspunsul LLM generat pentru un moment.
-// Design: surface card, icon colorat, text LLM, metadate discrete.
+// Design: glass card .ultraThinMaterial cu border subtle, icon container colorat,
+// badge accent capsule, body 14pt + footer mint expand.
+//
+// API public PĂSTRAT — nu rupe call site-urile existente.
 
 public struct MomentCard: View {
 
@@ -24,38 +27,38 @@ public struct MomentCard: View {
     // MARK: - Body
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: SolSpacing.md) {
+        VStack(alignment: .leading, spacing: 14) {
 
-            // Header rând
-            HStack(spacing: SolSpacing.sm) {
+            // Header rând: icon container colorat + title/subtitle + badge
+            HStack(alignment: .top, spacing: 12) {
                 momentIconView
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(moment.title)
-                        .font(.solHeadingSM)
-                        .foregroundStyle(Color.solTextPrimary)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.white)
                     Text(moment.subtitle)
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solTextMuted)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.white.opacity(0.45))
                 }
+
                 Spacer()
+
                 severityBadge
             }
 
-            // Separator subtil
-            Divider()
-                .background(Color.solBorder)
-
             // Conținut LLM
             Text(displayedText)
-                .font(.solBodyLG)
-                .foregroundStyle(Color.solTextPrimary)
-                .lineSpacing(4)
+                .font(.system(size: 14))
+                .foregroundStyle(Color.white.opacity(0.85))
+                .lineSpacing(2)
                 .animation(.easeInOut(duration: 0.25), value: isExpanded)
 
-            // Footer — timp generat + expand button
+            // Footer — timp generat + expand button mint
             HStack {
                 Text(moment.timeAgoString)
-                    .solMuted()
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.white.opacity(0.35))
 
                 Spacer()
 
@@ -66,44 +69,87 @@ public struct MomentCard: View {
                         }
                     } label: {
                         Text(isExpanded ? "Mai puțin" : "Citește tot")
-                            .font(.solCaption)
-                            .foregroundStyle(Color.solMint)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.solMintExact)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
-        .padding(SolSpacing.xl)
-        .solCard()
+        .padding(16)
+        .background(
+            LinearGradient(
+                colors: [Color.white.opacity(0.04), Color.white.opacity(0.02)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .background(.ultraThinMaterial.opacity(0.55))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.4), radius: 20, x: 0, y: 8)
     }
 
     // MARK: - Sub-views
 
     @ViewBuilder
     private var momentIconView: some View {
+        let accent = preciseAccent
         ZStack {
-            Circle()
-                .fill(moment.accentColor.opacity(0.15))
-                .frame(width: 40, height: 40)
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(accent.iconGradient)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .stroke(accent.color.opacity(0.4), lineWidth: 1)
+                )
             Image(systemName: moment.systemIconName)
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(moment.accentColor)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(accent.color)
         }
+        .frame(width: 36, height: 36)
+        .shadow(color: accent.color.opacity(0.18), radius: 10)
     }
 
     @ViewBuilder
     private var severityBadge: some View {
         if let badge = moment.badge {
-            Text(badge)
-                .font(.solCaption)
-                .foregroundStyle(moment.accentColor)
-                .padding(.horizontal, SolSpacing.sm)
-                .padding(.vertical, SolSpacing.xs)
-                .background(moment.accentColor.opacity(0.12))
-                .clipShape(Capsule())
+            let accent = preciseAccent
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(accent.color)
+                    .frame(width: 6, height: 6)
+                    .shadow(color: accent.color, radius: 4)
+                Text(badge)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(accent.lightColor)
+                    .tracking(0.5)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule().fill(accent.color.opacity(0.10))
+            )
+            .overlay(
+                Capsule().stroke(accent.color.opacity(0.25), lineWidth: 1)
+            )
         }
     }
 
     // MARK: - Helpers
+
+    /// Map accentul DisplayMoment (Color) la SolAccent precis pentru tokens noi.
+    private var preciseAccent: SolAccent {
+        switch moment.momentTypeRaw {
+        case "spiral_alert":           return .rose
+        case "upcoming_obligation":    return .amber
+        case "can_i_afford",
+             "pattern_alert":          return .blue
+        default:                       return .mint
+        }
+    }
 
     private var displayedText: String {
         guard !isExpanded && moment.llmResponse.count > 200 else {
@@ -221,10 +267,11 @@ public extension DisplayMoment {
 
     private static func accentColorFor(_ type: MomentType) -> Color {
         switch type {
-        case .spiralAlert:         return .solDestructive
-        case .upcomingObligation:  return .solWarning
-        case .canIAfford, .patternAlert: return .solCyan
-        default:                   return .solPrimary
+        case .spiralAlert:         return .solRoseExact
+        case .upcomingObligation:  return .solAmberExact
+        case .canIAfford,
+             .patternAlert:        return .solBlueExact
+        default:                   return .solMintExact
         }
     }
 
@@ -246,7 +293,7 @@ extension DisplayMoment {
         title: "Pot să-mi permit?",
         subtitle: "Pizza de la Glovo · 65 RON",
         llmResponse: "DA, îți permiți. După pizza rămâi cu 735 RON pentru 9 zile, adică 81 RON/zi — e ok. Comanda fără griji.",
-        accentColor: .solMint,
+        accentColor: .solMintExact,
         systemIconName: "checkmark.circle.fill",
         badge: "DA"
     )
@@ -256,17 +303,17 @@ extension DisplayMoment {
         title: "Alertă financiară",
         subtitle: "Spiral score 3 — Critic",
         llmResponse: "Vreau să vorbim 2 minute. Soldul tău scade constant — 4 luni la rând balanța finală a scăzut. Ai acum un IFN activ (Credius, ~3.250 RON total), plus un card de credit cu 1.840 RON datorie. Obligațiile depășesc venitul cu 380 RON/lună. Cel mai ușor prim pas: anulează abonamentele pe care nu le folosești — Netflix, HBO Max, Spotify împreună fac 104 RON/lună. CSALB te poate ajuta să renegociezi creditul gratuit. Asta e fixabil. Mergem împreună.",
-        accentColor: .solDanger,
+        accentColor: .solRoseExact,
         systemIconName: "exclamationmark.triangle.fill",
         badge: "CRITIC"
     )
 
     static let previewPayday = DisplayMoment(
         momentTypeRaw: "payday",
-        title: "Salariul a intrat! 🎉",
+        title: "Salariul a intrat!",
         subtitle: "5.200 RON · azi",
         llmResponse: "Banii au ajuns! Ai 5.200 RON intrați. Am rezervat 1.500 RON pentru obligații fixe — rămâi cu 3.660 RON liberi, adică 122 RON/zi pentru luna asta. E mai bine decât luna trecută!",
-        accentColor: .solMint,
+        accentColor: .solMintExact,
         systemIconName: "banknote.fill",
         badge: nil
     )
@@ -276,24 +323,27 @@ extension DisplayMoment {
 
 #Preview("Moment Card — CanIAfford") {
     ZStack {
-        Color.solCanvas.ignoresSafeArea()
+        Color.solCanvasDark.ignoresSafeArea()
         MomentCard(moment: .previewCanIAfford)
             .padding()
     }
+    .preferredColorScheme(.dark)
 }
 
 #Preview("Moment Card — Spiral Alert") {
     ZStack {
-        Color.solCanvas.ignoresSafeArea()
+        Color.solCanvasDark.ignoresSafeArea()
         MomentCard(moment: .previewSpiral)
             .padding()
     }
+    .preferredColorScheme(.dark)
 }
 
 #Preview("Moment Card — Payday") {
     ZStack {
-        Color.solCanvas.ignoresSafeArea()
+        Color.solCanvasDark.ignoresSafeArea()
         MomentCard(moment: .previewPayday)
             .padding()
     }
+    .preferredColorScheme(.dark)
 }

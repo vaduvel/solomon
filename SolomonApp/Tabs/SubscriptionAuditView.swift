@@ -265,8 +265,8 @@ struct SubscriptionAuditView: View {
     private var percentOfIncomeText: String {
         // Aproximare conservativă (nu blocăm UI dacă nu avem venit calculat).
         // 4500 RON e fallback pentru cazul când nu există date – evită ÷0 și păstrează aspectul.
+        // Cu fallback-ul fix de mai sus, condiția pentru 0 nu se aplică — eliminăm ramura never-executed.
         let monthlyIncomeRON: Int = 4500
-        guard monthlyIncomeRON > 0 else { return "" }
         let pct = Double(potentialMonthlySavings) / Double(monthlyIncomeRON) * 100
         return String(format: "%.1f%% din venit", pct)
     }

@@ -1,173 +1,162 @@
 import SwiftUI
 import UserNotifications
 
-// MARK: - Ecran 7 — Permisiuni (Apple HIG aligned)
+// MARK: - Ecran 7 — Permisiuni (Solomon DS)
 //
-// Refactor: butoane stacked vertical (NU side-by-side care făcea wrap urât).
-// Pattern HIG: explain → permission card → next.
-// Spec §11 ecran 7.
+// Pattern: spiral.html (eyebrow + titlu) + settings.html (toggle rows în SolListCard).
 
 struct OnboardingScreen7Permissions: View {
     @Environment(OnboardingState.self) var state
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: SolSpacing.xl) {
+        ZStack {
+            MeshBackground()
 
-                // Header
-                VStack(alignment: .leading, spacing: SolSpacing.xs) {
-                    Text("Permisiunile tale")
-                        .font(.largeTitle.weight(.bold))
-                        .foregroundStyle(Color.solForeground)
-                    Text("Solomon are nevoie de câteva acces-uri. Tu controlezi tot.")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+
+                    // Header — eyebrow + titlu
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("PASUL 7")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.solMintLight)
+                            .tracking(1.4)
+
+                        Text("Permisiuni")
+                            .font(.system(size: 30, weight: .semibold))
+                            .foregroundStyle(Color.white)
+                            .tracking(-0.7)
+
+                        Text("Solomon are nevoie de permisiuni ca să te ajute")
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.white.opacity(0.55))
+                            .padding(.top, 2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 20)
+                    .padding(.bottom, 4)
+
+                    // Permission rows
+                    SolListCard {
+                        permissionRow(
+                            icon: "bell.fill",
+                            iconAccent: .mint,
+                            title: "Notificări",
+                            subtitle: "Pentru alerte critice (spirală, plăți restante)",
+                            isGranted: state.pushAllowed
+                        )
+                        SolHairlineDivider()
+                        permissionRow(
+                            icon: "lock.shield.fill",
+                            iconAccent: .blue,
+                            title: "Date private",
+                            subtitle: "Tot pe device, nicio cloud",
+                            isGranted: true
+                        )
+                    }
+
+                    // Insight — DE CE?
+                    SolInsightCard(
+                        icon: "questionmark.circle.fill",
+                        label: "DE CE?",
+                        accent: .blue
+                    ) {
+                        Text("Notificările te previn la timp, nu post-factum. Datele rămân pe device — Solomon rulează local, fără cloud, fără tracking.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.white.opacity(0.75))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    // Buttons
+                    VStack(spacing: 10) {
+                        SolPrimaryButton("Permite și continuă", fullWidth: true) {
+                            Task { await requestAndContinue() }
+                        }
+                        SolSecondaryButton("Mai târziu", fullWidth: true) {
+                            state.next()
+                        }
+                    }
+                    .padding(.top, 4)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, SolSpacing.lg)
-
-                permissionRow(
-                    icon: "envelope.fill",
-                    iconColor: .solCyan,
-                    title: "Email",
-                    description: "Pentru a-ți arăta unde se duc banii. Doar emailuri financiare.",
-                    isGranted: state.gmailConnected,
-                    primaryTitle: "Conectează Gmail",
-                    primaryAction: connectGmail
-                )
-
-                permissionRow(
-                    icon: "bell.fill",
-                    iconColor: .solPrimary,
-                    title: "Notificări",
-                    description: "Doar lucruri care contează: factura mare, IFN suspect, săptămâna ta.",
-                    isGranted: state.pushAllowed,
-                    primaryTitle: "Activează",
-                    primaryAction: { Task { await requestPushPermission() } }
-                )
-
-                permissionRow(
-                    icon: "brain.head.profile",
-                    iconColor: .solWarning,
-                    title: "Ajută Solomon",
-                    description: "Conversațiile tale, anonimizate, antrenează un model românesc mai bun.",
-                    isGranted: state.trainingOptIn,
-                    primaryTitle: "Da, ajut",
-                    primaryAction: { state.trainingOptIn = true }
-                )
+                .padding(.horizontal, 18)
+                .padding(.bottom, 32)
             }
-            .padding(.horizontal, SolSpacing.lg)
-            .padding(.bottom, SolSpacing.xxxl)
-        }
-        .safeAreaInset(edge: .bottom) {
-            SolomonButton("Continuă", icon: "arrow.right") {
-                Haptics.medium()
-                state.next()
-            }
-            .padding(.horizontal, SolSpacing.lg)
-            .padding(.vertical, SolSpacing.base)
-            .background(.ultraThinMaterial)
         }
     }
 
-    // MARK: - Permission row (vertical stack, NU side-by-side)
+    // MARK: - Row
 
     @ViewBuilder
     private func permissionRow(
         icon: String,
-        iconColor: Color,
+        iconAccent: SolAccent,
         title: String,
-        description: String,
-        isGranted: Bool,
-        primaryTitle: String,
-        primaryAction: @escaping () -> Void
+        subtitle: String,
+        isGranted: Bool
     ) -> some View {
-        VStack(alignment: .leading, spacing: SolSpacing.md) {
-            HStack(spacing: SolSpacing.md) {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(iconAccent.iconGradient)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(iconAccent.color.opacity(0.20), lineWidth: 1)
+                    )
                 Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundStyle(iconColor)
-                    .symbolRenderingMode(.hierarchical)
-                    .frame(width: 32)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(iconAccent.color)
+            }
+            .frame(width: 34, height: 34)
 
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.headline)
-                    .foregroundStyle(Color.solForeground)
-
-                Spacer()
-
-                if isGranted {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(Color.solPrimary)
-                        .symbolRenderingMode(.hierarchical)
-                }
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color.white)
+                Text(subtitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.white.opacity(0.4))
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text(description)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
 
-            if !isGranted {
-                Button(primaryTitle) {
-                    Haptics.light()
-                    primaryAction()
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
-                .tint(Color.solPrimary)
-                .frame(maxWidth: .infinity, minHeight: 44)
-            }
+            SolChip(isGranted ? "ACTIV" : "ÎN AȘTEPTARE", kind: isGranted ? .mint : .muted)
         }
-        .padding(SolSpacing.cardStandard)
-        .solCard()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
     }
 
     // MARK: - Actions
 
-    private func connectGmail() {
-        // Faza 28+: Gmail OAuth flow real (GoogleSignIn SDK)
-        state.gmailConnected = true
-        Haptics.success()
-    }
-
-    private func requestPushPermission() async {
-        // FAZA B3: cerem și .criticalAlert pentru Spiral Alert / Upcoming Obligation
-        // ca să străbată Focus / Do Not Disturb. iOS poate respinge tăcut .criticalAlert
-        // dacă entitlement-ul nu e activ în portalul Apple — în acest caz cade la
-        // .alert standard, dar restul flow-ului rămâne neschimbat.
+    private func requestAndContinue() async {
         let options: UNAuthorizationOptions = [.alert, .sound, .badge, .criticalAlert]
         do {
             let granted = try await UNUserNotificationCenter.current()
                 .requestAuthorization(options: options)
-            state.pushAllowed = granted
             await MainActor.run {
-                granted ? Haptics.success() : Haptics.warning()
+                state.pushAllowed = granted
+                state.next()
             }
         } catch {
-            // Dacă .criticalAlert e respins (entitlement lipsă), retry fără el.
             do {
                 let granted = try await UNUserNotificationCenter.current()
                     .requestAuthorization(options: [.alert, .sound, .badge])
-                state.pushAllowed = granted
                 await MainActor.run {
-                    granted ? Haptics.success() : Haptics.warning()
+                    state.pushAllowed = granted
+                    state.next()
                 }
             } catch {
-                state.pushAllowed = false
-                await MainActor.run { Haptics.error() }
+                await MainActor.run {
+                    state.pushAllowed = false
+                    state.next()
+                }
             }
         }
     }
 }
 
 #Preview {
-    ZStack {
-        Color.solCanvas.ignoresSafeArea()
-        OnboardingScreen7Permissions()
-            .environment(OnboardingState())
-    }
-    .preferredColorScheme(.dark)
+    OnboardingScreen7Permissions()
+        .environment(OnboardingState())
+        .preferredColorScheme(.dark)
 }

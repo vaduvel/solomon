@@ -1,88 +1,193 @@
 import SwiftUI
 
-// MARK: - Ecran 8 — Procesare (Apple HIG aligned)
+// MARK: - Ecran 8 — Procesare (Solomon DS)
 //
-// Pattern HIG: animated icon + title + subtitle + animated progress steps.
-// Folosim .symbolEffect(.pulse) iOS 17+ pentru animație nativ.
+// Pattern din Solomon DS: eyebrow + titlu + subtitle + SolListCard cu rows numerotate
+// (spinner mint pentru in-progress + checkmark mint pentru done) + SolLinearProgress global jos.
+// Auto-next când toate task-urile sunt done.
 
 struct OnboardingScreen8Processing: View {
-    @Environment(OnboardingState.self) var state
+    @Environment(OnboardingState.self) private var stateEnv
 
     var body: some View {
-        VStack(spacing: 0) {
+        @Bindable var state = stateEnv
+        ZStack {
+            MeshBackground()
 
-            Spacer()
+            VStack(spacing: 0) {
+                Spacer(minLength: SolSpacing.xl)
 
-            // Animated sparkle (HIG iOS 17+)
-            Image(systemName: "sparkles")
-                .font(.system(size: 64, weight: .light))
-                .foregroundStyle(LinearGradient.solHero)
-                .symbolEffect(.pulse, options: .repeating)
-                .symbolRenderingMode(.hierarchical)
-                .frame(width: 96, height: 96)
-                .background(
-                    Circle()
-                        .fill(Color.solPrimary.opacity(0.15))
-                )
-                .overlay(
-                    Circle()
-                        .stroke(Color.solPrimary.opacity(0.4), lineWidth: 2)
-                )
+                // Eyebrow + titlu + subtitle
+                VStack(spacing: SolSpacing.sm) {
+                    Text("PASUL 8")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.solMintLight)
+                        .tracking(1.4)
+                        .textCase(.uppercase)
 
-            VStack(spacing: SolSpacing.xs) {
-                Text("Solomon analizează...")
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(Color.solForeground)
-                Text("Mă uit la ultimele 6 luni de date.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.top, SolSpacing.lg)
+                    Text("Solomon învață despre tine")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .tracking(-0.5)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
 
-            Spacer()
-
-            // Tasks list
-            VStack(spacing: SolSpacing.sm) {
-                ForEach(state.processingTasks) { task in
-                    ProcessingTaskRow(title: task.title, state: task.state)
+                    Text("Configurez Safe to Spend, detectez tipare și pregătesc primul raport.")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.white.opacity(0.55))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, SolSpacing.lg)
                 }
-            }
-            .padding(.horizontal, SolSpacing.lg)
+                .padding(.horizontal, SolSpacing.lg)
 
-            Spacer()
-        }
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: SolSpacing.sm) {
-                if state.canProceedFromCurrentStep {
-                    SolomonButton("Vezi primul raport", icon: "arrow.right") {
-                        Haptics.medium()
-                        state.next()
+                Spacer(minLength: SolSpacing.xl)
+
+                // Lista task-urilor (numerotate, glass rows)
+                SolListCard {
+                    ForEach(Array(state.processingTasks.enumerated()), id: \.element.id) { index, task in
+                        ProcessingStepRow(
+                            number: index + 1,
+                            title: task.title,
+                            state: task.state
+                        )
+                        if index < state.processingTasks.count - 1 {
+                            SolHairlineDivider()
+                        }
                     }
-                    .transition(.opacity.combined(with: .scale))
-                } else {
-                    Text("Te rugăm să aștepți...")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, minHeight: 50)
                 }
+                .padding(.horizontal, SolSpacing.lg)
+
+                Spacer(minLength: SolSpacing.xl)
+
+                // Linear progress global
+                VStack(spacing: SolSpacing.xs) {
+                    SolLinearProgress(progress: globalProgress, accent: .mint, glow: true)
+                        .frame(height: 6)
+                    HStack {
+                        Text(progressLabel)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.45))
+                            .tracking(0.4)
+                            .textCase(.uppercase)
+                        Spacer()
+                        Text("\(Int(globalProgress * 100))%")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.solMintLight)
+                            .monospacedDigit()
+                    }
+                }
+                .padding(.horizontal, SolSpacing.lg)
+                .padding(.bottom, SolSpacing.xl)
             }
-            .padding(.horizontal, SolSpacing.lg)
-            .padding(.vertical, SolSpacing.base)
-            .background(.ultraThinMaterial)
-            .animation(.smooth, value: state.canProceedFromCurrentStep)
         }
         .task {
             await state.runSimulatedProcessing()
             Haptics.success()
+            // Auto-next după 0.6s pentru ca utilizatorul să vadă toate check-urile
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            withAnimation(.smooth) {
+                state.next()
+            }
+        }
+    }
+
+    private var globalProgress: CGFloat {
+        let total = stateEnv.processingTasks.count
+        guard total > 0 else { return 0 }
+        let done = stateEnv.processingTasks.filter { $0.state == .done }.count
+        let running = stateEnv.processingTasks.filter { $0.state == .running }.count
+        return CGFloat(done) / CGFloat(total) + (running > 0 ? 0.5 / CGFloat(total) : 0)
+    }
+
+    private var progressLabel: String {
+        if stateEnv.processingTasks.allSatisfy({ $0.state == .done }) {
+            return "Solomon e gata"
+        }
+        return "Procesez..."
+    }
+}
+
+// MARK: - ProcessingStepRow (numerotat, glass)
+
+private struct ProcessingStepRow: View {
+    let number: Int
+    let title: String
+    let state: ProcessingTaskRow.State
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Bullet: număr / spinner / checkmark
+            ZStack {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(bulletBackground)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .stroke(bulletBorder, lineWidth: 1)
+                    )
+
+                bulletContent
+            }
+            .frame(width: 28, height: 28)
+
+            Text(title)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(textColor)
+
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
+        .animation(.easeOut(duration: 0.3), value: state)
+    }
+
+    @ViewBuilder
+    private var bulletContent: some View {
+        switch state {
+        case .pending:
+            Text("\(number)")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.4))
+                .monospacedDigit()
+        case .running:
+            ProgressView()
+                .progressViewStyle(.circular)
+                .tint(Color.solMintExact)
+                .scaleEffect(0.7)
+        case .done:
+            Image(systemName: "checkmark")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(Color.solMintExact)
+        }
+    }
+
+    private var bulletBackground: Color {
+        switch state {
+        case .pending: return Color.white.opacity(0.04)
+        case .running: return Color.solMintExact.opacity(0.10)
+        case .done:    return Color.solMintExact.opacity(0.12)
+        }
+    }
+
+    private var bulletBorder: Color {
+        switch state {
+        case .pending: return Color.white.opacity(0.08)
+        case .running: return Color.solMintExact.opacity(0.30)
+        case .done:    return Color.solMintExact.opacity(0.25)
+        }
+    }
+
+    private var textColor: Color {
+        switch state {
+        case .pending: return Color.white.opacity(0.4)
+        case .running: return Color.white
+        case .done:    return Color.white.opacity(0.85)
         }
     }
 }
 
 #Preview {
-    ZStack {
-        Color.solCanvas.ignoresSafeArea()
-        OnboardingScreen8Processing()
-            .environment(OnboardingState())
-    }
-    .preferredColorScheme(.dark)
+    OnboardingScreen8Processing()
+        .environment(OnboardingState())
+        .preferredColorScheme(.dark)
 }
