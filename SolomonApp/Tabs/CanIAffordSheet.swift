@@ -34,6 +34,10 @@ struct CanIAffordSheet: View {
     @State private var webSnippet: String?
     @State private var isScamRisk: Bool = false
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var didAppear: Bool = false
+    @State private var showVerdict: Bool = false
+
     private let calc = SafeToSpendCalculator()
     private let webClient = SolomonWebClient()
     private let scamMatcher = ScamPatternMatcher()
@@ -54,16 +58,31 @@ struct CanIAffordSheet: View {
                     VStack(alignment: .leading, spacing: 16) {
                         // Header bar: back + centered brand+title
                         headerBar
+                            .opacity(didAppear ? 1 : 0)
+                            .offset(y: reduceMotion ? 0 : (didAppear ? 0 : -6))
+                            .animation(.spring(response: 0.5, dampingFraction: 0.9), value: didAppear)
                             .padding(.bottom, 8)
 
                         if verdict != nil {
                             // Verdict mode
                             calcDisplay
+                                .opacity(showVerdict ? 1 : 0)
+                                .offset(y: reduceMotion ? 0 : (showVerdict ? 0 : 8))
+                                .animation(.spring(response: 0.6, dampingFraction: 0.9).delay(0.02), value: showVerdict)
                             verdictHero
+                                .opacity(showVerdict ? 1 : 0)
+                                .offset(y: reduceMotion ? 0 : (showVerdict ? 0 : 10))
+                                .animation(.spring(response: 0.6, dampingFraction: 0.9).delay(0.05), value: showVerdict)
                             if !mathRows.isEmpty {
                                 SolSectionHeaderRow("ANALIZĂ", meta: "\(mathRows.count) verificări")
                                     .padding(.top, 4)
+                                    .opacity(showVerdict ? 1 : 0)
+                                    .offset(y: reduceMotion ? 0 : (showVerdict ? 0 : 8))
+                                    .animation(.spring(response: 0.6, dampingFraction: 0.9).delay(0.07), value: showVerdict)
                                 analysisList
+                                    .opacity(showVerdict ? 1 : 0)
+                                    .offset(y: reduceMotion ? 0 : (showVerdict ? 0 : 8))
+                                    .animation(.spring(response: 0.6, dampingFraction: 0.9).delay(0.09), value: showVerdict)
                             }
                             if isScamRisk {
                                 scamAlert
@@ -75,14 +94,29 @@ struct CanIAffordSheet: View {
                                 webSnippetCard(snippet)
                             }
                             actionButtons
+                                .opacity(showVerdict ? 1 : 0)
+                                .offset(y: reduceMotion ? 0 : (showVerdict ? 0 : 8))
+                                .animation(.spring(response: 0.6, dampingFraction: 0.9).delay(0.12), value: showVerdict)
                                 .padding(.top, 4)
                         } else {
                             // Input mode
                             descriptionField
+                                .opacity(didAppear ? 1 : 0)
+                                .offset(y: reduceMotion ? 0 : (didAppear ? 0 : 8))
+                                .animation(.spring(response: 0.6, dampingFraction: 0.9).delay(0.02), value: didAppear)
                             calcDisplay
+                                .opacity(didAppear ? 1 : 0)
+                                .offset(y: reduceMotion ? 0 : (didAppear ? 0 : 8))
+                                .animation(.spring(response: 0.6, dampingFraction: 0.9).delay(0.04), value: didAppear)
                             numberPad
+                                .opacity(didAppear ? 1 : 0)
+                                .offset(y: reduceMotion ? 0 : (didAppear ? 0 : 8))
+                                .animation(.spring(response: 0.6, dampingFraction: 0.9).delay(0.06), value: didAppear)
                                 .padding(.top, 4)
                             askButton
+                                .opacity(didAppear ? 1 : 0)
+                                .offset(y: reduceMotion ? 0 : (didAppear ? 0 : 8))
+                                .animation(.spring(response: 0.6, dampingFraction: 0.9).delay(0.08), value: didAppear)
                                 .padding(.top, 4)
                         }
 
@@ -97,6 +131,7 @@ struct CanIAffordSheet: View {
         .toolbar(.hidden, for: .navigationBar)
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
+        .onAppear { didAppear = true }
     }
 
     // MARK: - Sheet handle
@@ -108,6 +143,9 @@ struct CanIAffordSheet: View {
             .frame(width: 36, height: 5)
             .padding(.top, 8)
             .padding(.bottom, 4)
+            .opacity(didAppear ? 1 : 0)
+            .offset(y: reduceMotion ? 0 : (didAppear ? 0 : -6))
+            .animation(.spring(response: 0.5, dampingFraction: 0.9), value: didAppear)
     }
 
     // MARK: - Header bar (back + centered title)
@@ -115,7 +153,8 @@ struct CanIAffordSheet: View {
     @ViewBuilder
     private var headerBar: some View {
         HStack(alignment: .center) {
-            SolBackButton { dismiss() }
+            SolBackButton { Haptics.light(); dismiss() }
+                .pressEffect(scale: reduceMotion ? 1 : 0.96)
 
             Spacer(minLength: 0)
 
@@ -280,6 +319,7 @@ struct CanIAffordSheet: View {
         }
         .buttonStyle(.plain)
         .disabled(key.isEmpty)
+        .pressEffect(scale: reduceMotion ? 1 : 0.97)
     }
 
     // MARK: - Ask button
@@ -318,6 +358,7 @@ struct CanIAffordSheet: View {
         }
         .buttonStyle(.plain)
         .disabled(amountValue == 0 || isCalculating)
+        .pressEffect(scale: reduceMotion ? 1 : 0.97)
     }
 
     // MARK: - Verdict hero
@@ -346,6 +387,9 @@ struct CanIAffordSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             } badge: {
                 SolHeroBadge("VERDICT", accent: heroAccent)
+                    .scaleEffect(showVerdict ? 1 : 0.98)
+                    .opacity(showVerdict ? 1 : 0)
+                    .animation(.spring(response: 0.6, dampingFraction: 0.85).delay(0.06), value: showVerdict)
             }
         }
     }
@@ -514,6 +558,9 @@ struct CanIAffordSheet: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
+                .opacity(showVerdict ? 1 : 0)
+                .offset(y: reduceMotion ? 0 : (showVerdict ? 0 : 6))
+                .animation(.spring(response: 0.5, dampingFraction: 0.9).delay(0.02 * Double(idx)), value: showVerdict)
             }
         }
     }
@@ -609,11 +656,16 @@ struct CanIAffordSheet: View {
     private var actionButtons: some View {
         HStack(spacing: 8) {
             SolSecondaryButton("Întreabă altceva", fullWidth: true) {
+                Haptics.light()
                 reset()
             }
+            .pressEffect(scale: reduceMotion ? 1 : 0.97)
+
             SolPrimaryButton("Gata", accent: .mint, fullWidth: true) {
+                Haptics.light()
                 dismiss()
             }
+            .pressEffect(scale: reduceMotion ? 1 : 0.97)
         }
     }
 
@@ -654,6 +706,7 @@ struct CanIAffordSheet: View {
         amountText = "0"
         description = ""
         verdict = nil
+        showVerdict = false
         llmResponse = nil
         calculatedBudget = nil
         webSnippet = nil
@@ -670,7 +723,10 @@ struct CanIAffordSheet: View {
         let userRepo = CoreDataUserProfileRepository(context: ctx)
 
         guard let profile = try? userRepo.fetchProfile() else {
-            verdict = .no(reason: .wouldBreakObligation)
+            withAnimation {
+                verdict = .no(reason: .wouldBreakObligation)
+                showVerdict = true
+            }
             return
         }
 
@@ -725,7 +781,10 @@ struct CanIAffordSheet: View {
         calculatedBudget = budget
 
         let askedAmount = Money(amountValue)
-        verdict = budget.verdict(for: askedAmount)
+        withAnimation {
+            verdict = budget.verdict(for: askedAmount)
+            showVerdict = true
+        }
 
         // Build LLM context for richer response
         let item = description.isEmpty ? "achiziția" : description
@@ -807,6 +866,29 @@ struct CanIAffordSheet: View {
         } catch {
             llmResponse = nil
         }
+    }
+}
+
+private struct PressEffect: ViewModifier {
+    @GestureState private var isPressed = false
+    let scale: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isPressed ? scale : 1)
+            .opacity(isPressed ? 0.98 : 1)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .updating($isPressed) { _, state, _ in
+                        state = true
+                    }
+            )
+    }
+}
+
+private extension View {
+    func pressEffect(scale: CGFloat = 0.98) -> some View {
+        modifier(PressEffect(scale: scale))
     }
 }
 

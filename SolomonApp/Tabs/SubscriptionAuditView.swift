@@ -23,6 +23,10 @@ struct SubscriptionAuditView: View {
     @State private var ghosts: [Subscription] = []
     @State private var keptActive: [Subscription] = []
 
+    @State private var didAppear: Bool = false
+    @State private var showSections: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -35,18 +39,33 @@ struct SubscriptionAuditView: View {
                 ScrollView {
                     VStack(spacing: SolSpacing.md) {
                         topBar
+                            .opacity(didAppear ? 1 : 0)
+                            .offset(y: reduceMotion ? 0 : (didAppear ? 0 : -6))
+                            .animation(.spring(response: 0.5, dampingFraction: 0.9), value: didAppear)
 
                         heroCard
+                            .opacity(didAppear ? 1 : 0)
+                            .offset(y: reduceMotion ? 0 : (didAppear ? 0 : 8))
+                            .animation(.spring(response: 0.5, dampingFraction: 0.85), value: didAppear)
                             .padding(.top, 4)
 
                         insightCard
+                            .opacity(didAppear ? 1 : 0)
+                            .offset(y: reduceMotion ? 0 : (didAppear ? 0 : 10))
+                            .animation(.spring(response: 0.6, dampingFraction: 0.9).delay(0.05), value: didAppear)
 
                         if !ghosts.isEmpty {
                             ghostsSection
+                                .opacity(showSections ? 1 : 0)
+                                .offset(y: reduceMotion ? 0 : (showSections ? 0 : 12))
+                                .animation(.spring(response: 0.6, dampingFraction: 0.9).delay(0.1), value: showSections)
                         }
 
                         if !keptActive.isEmpty {
                             activeSection
+                                .opacity(showSections ? 1 : 0)
+                                .offset(y: reduceMotion ? 0 : (showSections ? 0 : 14))
+                                .animation(.spring(response: 0.6, dampingFraction: 0.9).delay(0.15), value: showSections)
                         }
 
                         Spacer(minLength: 32)
@@ -57,7 +76,18 @@ struct SubscriptionAuditView: View {
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
-            .onAppear { load() }
+            .onAppear {
+                load()
+                // Trigger staged appears
+                didAppear = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                    showSections = true
+                }
+            }
+            .onDisappear {
+                didAppear = false
+                showSections = false
+            }
         }
     }
 
@@ -66,7 +96,8 @@ struct SubscriptionAuditView: View {
     @ViewBuilder
     private var topBar: some View {
         HStack(alignment: .center) {
-            SolBackButton { dismiss() }
+            SolBackButton { Haptics.light(); dismiss() }
+                .pressEffect(scale: reduceMotion ? 1 : 0.96)
 
             Spacer(minLength: 8)
 
@@ -83,7 +114,8 @@ struct SubscriptionAuditView: View {
 
             Spacer(minLength: 8)
 
-            SolIconButton(systemName: "ellipsis") { }
+            SolIconButton(systemName: "ellipsis") { Haptics.light() }
+                .pressEffect(scale: reduceMotion ? 1 : 0.96)
         }
         .padding(.bottom, 8)
     }
@@ -102,6 +134,8 @@ struct SubscriptionAuditView: View {
                     currency: "RON / LUNĂ",
                     accent: .amber
                 )
+                .scaleEffect(reduceMotion ? 1 : (didAppear ? 1 : 0.995))
+                .animation(.spring(response: 0.5, dampingFraction: 0.85), value: didAppear)
 
                 // Meta: RON/an + % venit
                 HStack(spacing: 8) {
@@ -126,18 +160,25 @@ struct SubscriptionAuditView: View {
                         accent: .amber,
                         fullWidth: true
                     ) {
+                        Haptics.light()
                         cancelAll()
                     }
+                    .pressEffect(scale: reduceMotion ? 1 : 0.97)
 
                     SolSecondaryButton("Pas cu pas") {
+                        Haptics.light()
                         if let first = ghosts.first {
                             cancel(subscription: first)
                         }
                     }
+                    .pressEffect(scale: reduceMotion ? 1 : 0.97)
                 }
             }
         } badge: {
             SolHeroBadge("RECUPERABIL", accent: .amber)
+                .scaleEffect(didAppear ? 1 : 0.98)
+                .opacity(didAppear ? 1 : 0)
+                .animation(.spring(response: 0.7, dampingFraction: 0.85).delay(0.03), value: didAppear)
         }
     }
 
@@ -155,6 +196,7 @@ struct SubscriptionAuditView: View {
                 .font(.system(size: 14))
                 .foregroundStyle(Color.white.opacity(0.85))
                 .lineSpacing(2)
+                .animation(.easeInOut(duration: 0.2), value: ghosts.count)
         }
     }
 
@@ -209,15 +251,23 @@ struct SubscriptionAuditView: View {
                 meta: "\(ghosts.count) din \(ghosts.count + keptActive.count)"
             )
             .padding(.top, 4)
+            .opacity(showSections ? 1 : 0)
+            .offset(y: reduceMotion ? 0 : (showSections ? 0 : 8))
+            .animation(.spring(response: 0.6, dampingFraction: 0.9).delay(0.06), value: showSections)
 
             SolListCard {
-                ForEach(Array(ghosts.enumerated()), id: \.element.id) { idx, sub in
-                    if idx > 0 { SolHairlineDivider() }
-                    SubscriptionAuditRow(
-                        subscription: sub,
-                        isGhost: true,
-                        onTap: { cancel(subscription: sub) }
-                    )
+                Group {
+                    ForEach(Array(ghosts.enumerated()), id: \.element.id) { idx, sub in
+                        if idx > 0 { SolHairlineDivider() }
+                        SubscriptionAuditRow(
+                            subscription: sub,
+                            isGhost: true,
+                            onTap: { cancel(subscription: sub) }
+                        )
+                        .opacity(showSections ? 1 : 0)
+                        .offset(y: reduceMotion ? 0 : (showSections ? 0 : 6))
+                        .animation(.spring(response: 0.5, dampingFraction: 0.9).delay(0.02 * Double(idx)), value: showSections)
+                    }
                 }
             }
         }
@@ -233,15 +283,23 @@ struct SubscriptionAuditView: View {
                 meta: "\(keptActive.count) active"
             )
             .padding(.top, 4)
+            .opacity(showSections ? 1 : 0)
+            .offset(y: reduceMotion ? 0 : (showSections ? 0 : 8))
+            .animation(.spring(response: 0.6, dampingFraction: 0.9).delay(0.06), value: showSections)
 
             SolListCard {
-                ForEach(Array(keptActive.enumerated()), id: \.element.id) { idx, sub in
-                    if idx > 0 { SolHairlineDivider() }
-                    SubscriptionAuditRow(
-                        subscription: sub,
-                        isGhost: false,
-                        onTap: nil
-                    )
+                Group {
+                    ForEach(Array(keptActive.enumerated()), id: \.element.id) { idx, sub in
+                        if idx > 0 { SolHairlineDivider() }
+                        SubscriptionAuditRow(
+                            subscription: sub,
+                            isGhost: false,
+                            onTap: nil
+                        )
+                        .opacity(showSections ? 1 : 0)
+                        .offset(y: reduceMotion ? 0 : (showSections ? 0 : 6))
+                        .animation(.spring(response: 0.5, dampingFraction: 0.9).delay(0.02 * Double(idx)), value: showSections)
+                    }
                 }
             }
         }
@@ -320,6 +378,8 @@ private struct SubscriptionAuditRow: View {
     let isGhost: Bool
     let onTap: (() -> Void)?
 
+    @State private var isPressed: Bool = false
+
     var body: some View {
         HStack(spacing: 12) {
             SolBrandLogo(brandFor(subscription.name))
@@ -351,15 +411,24 @@ private struct SubscriptionAuditRow: View {
                     .foregroundStyle(Color.white.opacity(0.35))
             }
         }
+        .scaleEffect(isPressed ? 0.995 : 1)
+        .opacity(isPressed ? 0.98 : 1)
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .contentShape(Rectangle())
-        .onTapGesture {
-            if let onTap {
-                Haptics.light()
-                onTap()
-            }
-        }
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    if !isPressed { isPressed = true }
+                }
+                .onEnded { _ in
+                    isPressed = false
+                    if let onTap {
+                        Haptics.light()
+                        onTap()
+                    }
+                }
+        )
     }
 
     @ViewBuilder
@@ -481,6 +550,29 @@ private struct SubscriptionAuditRow: View {
             ),
             foreground: .white
         )
+    }
+}
+
+private struct PressEffect: ViewModifier {
+    @GestureState private var isPressed = false
+    let scale: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isPressed ? scale : 1)
+            .opacity(isPressed ? 0.98 : 1)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .updating($isPressed) { _, state, _ in
+                        state = true
+                    }
+            )
+    }
+}
+
+private extension View {
+    func pressEffect(scale: CGFloat = 0.98) -> some View {
+        modifier(PressEffect(scale: scale))
     }
 }
 

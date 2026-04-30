@@ -1,5 +1,6 @@
 import SwiftUI
 import os
+import SolomonCore
 import SolomonStorage
 
 // MARK: - OnboardingContainerView
@@ -14,6 +15,10 @@ struct OnboardingContainerView: View {
 
     @State private var state = OnboardingState()
     @State private var saveError: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var didAppear: Bool = false
+    @State private var dotsPulse: Bool = false
+    @State private var previousStep: Int = 0
 
     let onFinish: () -> Void
 
@@ -24,16 +29,22 @@ struct OnboardingContainerView: View {
             VStack(spacing: 0) {
                 // Top bar (progress + back)
                 topBar
+                    .opacity(didAppear ? 1 : 0)
+                    .offset(y: reduceMotion ? 0 : (didAppear ? 0 : -6))
+                    .animation(.spring(response: 0.5, dampingFraction: 0.9), value: didAppear)
                     .padding(.horizontal, SolSpacing.screenHorizontal)
                     .padding(.top, SolSpacing.sm)
 
                 // Current screen with slide transition
                 ZStack {
                     currentScreen
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .trailing).combined(with: .opacity),
-                            removal: .move(edge: .leading).combined(with: .opacity)
-                        ))
+                        .transition(
+                            reduceMotion ? .opacity : .asymmetric(
+                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                removal: .move(edge: .leading).combined(with: .opacity)
+                            )
+                        )
+                        .animation(.spring(response: 0.6, dampingFraction: 0.9), value: state.currentStep)
                         .id(state.currentStep)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -48,6 +59,23 @@ struct OnboardingContainerView: View {
             Button("Anulează", role: .cancel) { saveError = nil }
         } message: { error in
             Text("Solomon nu a putut salva datele tale (\(error)). Apasă \"Încearcă din nou\" — fără asta, datele introduse se pierd.")
+        }
+        .onAppear {
+            didAppear = true
+            previousStep = state.currentStep
+        }
+        .onDisappear {
+            didAppear = false
+        }
+        .onChange(of: state.currentStep) { newStep in
+            if !reduceMotion {
+                dotsPulse = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                    dotsPulse = false
+                }
+            }
+            Haptics.light()
+            previousStep = newStep
         }
     }
 
@@ -64,6 +92,7 @@ struct OnboardingContainerView: View {
     private var topBar: some View {
         HStack {
             Button {
+                Haptics.light()
                 state.back()
             } label: {
                 Image(systemName: "chevron.left")
@@ -73,6 +102,7 @@ struct OnboardingContainerView: View {
                     .background(Color.solCard)
                     .clipShape(Circle())
             }
+            .pressEffect(scale: reduceMotion ? 1 : 0.96)
             .opacity(state.canGoBack ? 1 : 0)
             .disabled(!state.canGoBack)
 
@@ -82,6 +112,9 @@ struct OnboardingContainerView: View {
                 totalSteps: OnboardingState.totalSteps,
                 currentStep: state.currentStep
             )
+            .scaleEffect(reduceMotion ? 1 : (dotsPulse ? 1.03 : 1.0))
+            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: dotsPulse)
+            .animation(.spring(response: 0.45, dampingFraction: 0.85), value: state.currentStep)
 
             Spacer()
 
@@ -127,6 +160,29 @@ struct OnboardingContainerView: View {
             Logger.onboarding.error("Onboarding save failed: \(error.localizedDescription, privacy: .public)")
             saveError = error.localizedDescription
         }
+    }
+}
+
+private struct PressEffect: ViewModifier {
+    @GestureState private var isPressed = false
+    let scale: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isPressed ? scale : 1)
+            .opacity(isPressed ? 0.98 : 1)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .updating($isPressed) { _, state, _ in
+                        state = true
+                    }
+            )
+    }
+}
+
+private extension View {
+    func pressEffect(scale: CGFloat = 0.98) -> some View {
+        modifier(PressEffect(scale: scale))
     }
 }
 
