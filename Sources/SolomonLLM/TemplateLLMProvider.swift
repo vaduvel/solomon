@@ -146,7 +146,8 @@ public final class TemplateLLMProvider: LLMProvider, @unchecked Sendable {
     private func renderUpcoming(_ ctx: [String: Any], name: String, formal: Bool) -> String {
         let upcoming = ctx["upcoming"] as? [String: Any]
         let oblName = (upcoming?["name"] as? String) ?? "factură"
-        let amount = (upcoming?["amount"] as? Int) ?? 0
+        // JSON key e "amount_estimated" (camelCase → snake_case via SolomonContextCoder)
+        let amount = (upcoming?["amount_estimated"] as? Int) ?? (upcoming?["amount"] as? Int) ?? 0
         let daysUntil = (upcoming?["days_until_due"] as? Int) ?? 0
 
         let adv = formal ? "Aveți" : "Ai"
