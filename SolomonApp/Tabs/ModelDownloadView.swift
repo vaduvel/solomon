@@ -1,15 +1,17 @@
 import SwiftUI
 import SolomonLLM
 
-// MARK: - ModelDownloadView
+// MARK: - ModelDownloadView (Solomon DS · Claude Design)
 //
-// Vizualizează state-ul modelului LLM on-device:
-//   - Nedescărcat: CTA "Descarcă Gemma" cu mărimea aprox.
-//   - Downloading: progress bar live
-//   - Activ: confirmare + buton "Șterge model"
-//   - Eroare: re-try
+// Vizualizează state-ul modelului LLM on-device cu design Solomon DS:
+//   - Hero card mint cu badge ACTIV + label model curent + size + status
+//   - Insight card explicând cum rulează AI-ul local + privacy
+//   - Section header "MODELE DISPONIBILE"
+//   - List card cu rows pentru fiecare model (Gemma E2B, Gemma 3 4B, Gemma E4B)
+//   - Trailing: chip "ACTIV" mint sau buton glass "Descarcă" (sau progress bar)
+//   - Footer note "Datele tale rămân pe telefon"
 //
-// Wired în Settings → "Modelul LLM".
+// Wired în Settings → "Modelul AI".
 
 struct ModelDownloadView: View {
 
@@ -17,246 +19,419 @@ struct ModelDownloadView: View {
     @State private var service = ModelDownloadService.shared
     @State private var showConfirmDelete: Bool = false
 
+    private let allModels: [MLXLLMProvider.Config] = [
+        .gemmaE2B,
+        .gemma3_4b,
+        .gemmaE4B
+    ]
+
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.solCanvas.ignoresSafeArea()
+        ZStack {
+            MeshBackground()
 
-                ScrollView {
-                    VStack(spacing: SolSpacing.lg) {
+            ScrollView {
+                VStack(spacing: 0) {
 
-                        heroCard
-                        modelPickerSection
-                        actionsSection
-                        infoSection
+                    // Sheet handle
+                    sheetHandle
+                        .padding(.bottom, 4)
 
-                        Spacer()
+                    // Header (back + brand + title)
+                    headerSection
+                        .padding(.bottom, SolSpacing.xl)
+
+                    // Hero card — model curent
+                    heroCard
+                        .padding(.bottom, SolSpacing.base)
+
+                    // Privacy / info insight
+                    privacyInsight
+                        .padding(.bottom, SolSpacing.xl)
+
+                    // Section header
+                    SolSectionHeaderRow(
+                        "MODELE DISPONIBILE",
+                        meta: "\(allModels.count) disponibile"
+                    )
+
+                    // Models list
+                    modelsListCard
+                        .padding(.bottom, SolSpacing.base)
+
+                    // Error state (dacă există)
+                    if case .loadFailed(let reason) = service.state {
+                        errorBanner(reason)
+                            .padding(.bottom, SolSpacing.base)
                     }
-                    .padding(.horizontal, SolSpacing.screenHorizontal)
-                    .padding(.top, SolSpacing.lg)
-                    .padding(.bottom, SolSpacing.hh)
+
+                    // Footer note
+                    footerNote
+                        .padding(.top, SolSpacing.sm)
+                        .padding(.bottom, SolSpacing.xl)
                 }
+                .padding(.horizontal, SolSpacing.xl)
             }
-            .navigationTitle("Modelul LLM")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Închide") { dismiss() }
-                        .foregroundStyle(Color.solMuted)
-                }
+        }
+        .preferredColorScheme(.dark)
+        .alert("Ștergi modelul?", isPresented: $showConfirmDelete) {
+            Button("Anulează", role: .cancel) {}
+            Button("Șterge", role: .destructive) {
+                Task { await service.deleteCurrentModel() }
             }
-            .alert("Ștergi modelul?", isPresented: $showConfirmDelete) {
-                Button("Anulează", role: .cancel) {}
-                Button("Șterge", role: .destructive) {
-                    Task { await service.deleteCurrentModel() }
-                }
-            } message: {
-                Text("Modelul descărcat va fi șters de pe device. Răspunsurile Solomon vor folosi template fallback până redescărcăm modelul.")
-            }
+        } message: {
+            Text("Modelul descărcat va fi șters de pe device. Răspunsurile Solomon vor folosi template fallback până redescărcăm modelul.")
         }
     }
 
-    // MARK: - Sections
+    // MARK: - Sheet handle
+
+    @ViewBuilder
+    private var sheetHandle: some View {
+        HStack {
+            Spacer()
+            Capsule()
+                .fill(Color.white.opacity(0.18))
+                .frame(width: 36, height: 5)
+            Spacer()
+        }
+        .padding(.top, 8)
+    }
+
+    // MARK: - Header (back + brand + title)
+
+    @ViewBuilder
+    private var headerSection: some View {
+        HStack(alignment: .center, spacing: 12) {
+            SolBackButton { dismiss() }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("SOLOMON · LLM")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.45))
+                    .tracking(1.4)
+                Text("Modelul AI")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .tracking(-0.4)
+            }
+            Spacer()
+        }
+        .padding(.top, SolSpacing.sm)
+    }
+
+    // MARK: - Hero card
 
     @ViewBuilder
     private var heroCard: some View {
-        VStack(spacing: SolSpacing.sm) {
-            IconContainer(
-                systemName: heroIconName,
-                variant: heroIconVariant,
-                size: 64,
-                iconSize: 28
-            )
-            Text(service.config.displayName)
-                .font(.solH1)
-                .foregroundStyle(Color.solForeground)
-            Text(service.stateLabel)
-                .font(.solBody)
-                .foregroundStyle(Color.solMuted)
+        SolHeroCard(accent: .mint) {
+            VStack(alignment: .leading, spacing: 0) {
+                // Top label
+                SolHeroLabel(heroLabel)
+                    .padding(.top, 4)
 
-            if case .downloading = service.state {
-                NeonProgressBar(
-                    progress: service.stateProgress,
-                    variant: .info,
-                    label: "Descărcare",
-                    trailing: "\(Int(service.stateProgress * 100))%"
-                )
-                .padding(.top, SolSpacing.md)
-            }
-        }
-        .padding(SolSpacing.cardHero)
-        .frame(maxWidth: .infinity)
-        .solGlassCard()
-    }
+                // Model name big
+                Text(service.config.displayName)
+                    .font(.system(size: 32, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .tracking(-1.0)
+                    .padding(.top, 6)
+                    .shadow(color: Color.solMintExact.opacity(0.18), radius: 30)
 
-    @ViewBuilder
-    private var modelPickerSection: some View {
-        VStack(alignment: .leading, spacing: SolSpacing.sm) {
-            Text("MODEL")
-                .font(.solMicro)
-                .foregroundStyle(Color.solMuted)
-                .tracking(1.2)
-
-            VStack(spacing: SolSpacing.sm) {
-                modelOption(
-                    title: "Gemma 2 (2B)",
-                    subtitle: "~1.5 GB · iPhone 14+",
-                    config: .gemmaE2B
-                )
-                modelOption(
-                    title: "Gemma 3 (4B) ✦ Recomandat",
-                    subtitle: "~2.8 GB · iPhone 15 Pro+",
-                    config: .gemma3_4b
-                )
-                modelOption(
-                    title: "Gemma 2 (9B)",
-                    subtitle: "~5 GB · iPhone 15 Pro+",
-                    config: .gemmaE4B
-                )
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func modelOption(
-        title: String,
-        subtitle: String,
-        config: MLXLLMProvider.Config
-    ) -> some View {
-        let isSelected = service.config.modelId == config.modelId
-        Button {
-            service.setConfig(config)
-        } label: {
-            HStack(spacing: SolSpacing.md) {
-                IconContainer(
-                    systemName: "cpu.fill",
-                    variant: isSelected ? .neon : .tinted,
-                    size: 36,
-                    iconSize: 14
-                )
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.solBodyBold)
-                        .foregroundStyle(Color.solForeground)
-                    Text(subtitle)
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solMuted)
+                // Meta row: size · status
+                HStack(spacing: 8) {
+                    Text(service.configSizeFormatted)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.white.opacity(0.55))
+                    Circle()
+                        .fill(Color.white.opacity(0.25))
+                        .frame(width: 3, height: 3)
+                    Text(service.stateLabel)
+                        .font(.system(size: 13))
+                        .foregroundStyle(heroStatusColor)
                 }
+                .padding(.top, 10)
+                .padding(.bottom, 18)
+
+                // Action row
+                heroActionRow
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } badge: {
+            SolHeroBadge(heroBadgeLabel, accent: heroBadgeAccent)
+        }
+    }
+
+    @ViewBuilder
+    private var heroActionRow: some View {
+        switch service.state {
+        case .loaded:
+            HStack(spacing: 8) {
+                Button {
+                    Haptics.light()
+                    showConfirmDelete = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Șterge model")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundStyle(Color.solRoseExact)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule().fill(Color.solRoseExact.opacity(0.10))
+                    )
+                    .overlay(
+                        Capsule().stroke(Color.solRoseExact.opacity(0.25), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
                 Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(Color.solPrimary)
+            }
+        case .downloading:
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Descărcare")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.55))
+                        .tracking(0.4)
+                    Spacer()
+                    Text("\(Int(service.stateProgress * 100))%")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.solMintLight)
+                        .monospacedDigit()
+                }
+                SolLinearProgress(
+                    progress: CGFloat(service.stateProgress),
+                    accent: .mint,
+                    height: 6,
+                    glow: true
+                )
+            }
+        case .notDownloaded:
+            SolPrimaryButton("Descarcă \(service.configSizeFormatted)", accent: .mint, fullWidth: true) {
+                Task { await service.startDownloadAndLoad() }
+            }
+        case .loadFailed:
+            SolPrimaryButton("Reîncearcă descărcarea", accent: .mint, fullWidth: true) {
+                Task { await service.startDownloadAndLoad() }
+            }
+        }
+    }
+
+    // MARK: - Privacy insight
+
+    @ViewBuilder
+    private var privacyInsight: some View {
+        SolInsightCard(
+            icon: "lock.shield.fill",
+            label: "SOLOMON · INFO",
+            timestamp: "on-device",
+            accent: .mint
+        ) {
+            Text("AI-ul rulează 100% local pe iPhone, folosind Apple Silicon (Metal). Conversațiile, sumele și categoriile tale nu pleacă niciodată de pe telefon — fără cloud, fără tracking, fără terți.")
+                .font(.system(size: 14))
+                .foregroundStyle(Color.white.opacity(0.85))
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: - Models list
+
+    @ViewBuilder
+    private var modelsListCard: some View {
+        SolListCard {
+            ForEach(Array(allModels.enumerated()), id: \.offset) { index, cfg in
+                modelRow(for: cfg)
+                if index < allModels.count - 1 {
+                    SolHairlineDivider()
                 }
             }
-            .padding(SolSpacing.base)
-            .background(isSelected ? Color.solPrimary.opacity(0.10) : Color.solCard)
-            .clipShape(RoundedRectangle(cornerRadius: SolRadius.xl))
-            .overlay(
-                RoundedRectangle(cornerRadius: SolRadius.xl)
-                    .stroke(isSelected ? Color.solPrimary : Color.solBorder, lineWidth: isSelected ? 1.5 : 1)
-            )
+        }
+    }
+
+    @ViewBuilder
+    private func modelRow(for cfg: MLXLLMProvider.Config) -> some View {
+        let isSelected = service.config.modelId == cfg.modelId
+        let isDownloading = isSelected && {
+            if case .downloading = service.state { return true } else { return false }
+        }()
+
+        Button {
+            Haptics.light()
+            service.setConfig(cfg)
+        } label: {
+            HStack(alignment: .center, spacing: 12) {
+                // Icon container
+                ZStack {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(SolAccent.mint.iconGradient)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                .stroke(Color.solMintExact.opacity(0.25), lineWidth: 1)
+                        )
+                    Image(systemName: "cpu.fill")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color.solMintExact)
+                }
+                .frame(width: 36, height: 36)
+
+                // Title + sub
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(cfg.displayName)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color.white)
+                    Text(rowSubtitle(for: cfg))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.white.opacity(0.4))
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                // Trailing
+                if isDownloading {
+                    progressTrailing
+                } else if isSelected, case .loaded = service.state {
+                    SolChip("ACTIV", kind: .mint)
+                } else {
+                    downloadGlassButton(for: cfg)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 
     @ViewBuilder
-    private var actionsSection: some View {
-        VStack(spacing: SolSpacing.sm) {
-            switch service.state {
-            case .notDownloaded:
-                SolomonButton(
-                    "Descarcă \(service.config.displayName) (\(service.configSizeFormatted))",
-                    icon: "arrow.down.circle.fill"
-                ) {
-                    Task { await service.startDownloadAndLoad() }
-                }
-            case .downloading:
-                SolomonButton("Descărcare în curs...", isLoading: true) {}
-                    .disabled(true)
-            case .loaded:
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.solPrimary)
-                    Text("Modelul e activ pe device")
-                        .font(.solBody)
-                        .foregroundStyle(Color.solForeground)
-                }
-                .padding(SolSpacing.base)
-                .frame(maxWidth: .infinity)
-                .solCard()
-
-                SolomonButton("Șterge modelul", style: .danger, icon: "trash") {
-                    showConfirmDelete = true
-                }
-            case .loadFailed(let reason):
-                Text(reason)
-                    .font(.solCaption)
-                    .foregroundStyle(Color.solDestructive)
-                SolomonButton("Reîncearcă", icon: "arrow.clockwise") {
-                    Task { await service.startDownloadAndLoad() }
-                }
-            }
+    private var progressTrailing: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            Text("\(Int(service.stateProgress * 100))%")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color.solMintLight)
+                .monospacedDigit()
+            SolLinearProgress(
+                progress: CGFloat(service.stateProgress),
+                accent: .mint,
+                height: 4,
+                glow: true
+            )
+            .frame(width: 80)
         }
     }
 
     @ViewBuilder
-    private var infoSection: some View {
-        VStack(alignment: .leading, spacing: SolSpacing.sm) {
-            Text("DETALII")
-                .font(.solMicro)
-                .foregroundStyle(Color.solMuted)
-                .tracking(1.2)
-
-            VStack(spacing: SolSpacing.sm) {
-                infoRow(label: "Mărime aproximativă", value: service.configSizeFormatted)
-                infoRow(label: "Pe device", value: service.sizeOnDiskFormatted)
-                infoRow(label: "Repository", value: service.config.modelId, isSmall: true)
+    private func downloadGlassButton(for cfg: MLXLLMProvider.Config) -> some View {
+        Button {
+            Haptics.medium()
+            service.setConfig(cfg)
+            Task { await service.startDownloadAndLoad() }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.down.circle")
+                    .font(.system(size: 11, weight: .semibold))
+                Text("Descarcă")
+                    .font(.system(size: 11, weight: .semibold))
             }
-            .padding(SolSpacing.cardSmall)
-            .solCard()
+            .foregroundStyle(Color.white.opacity(0.85))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule().fill(Color.white.opacity(0.05))
+            )
+            .overlay(
+                Capsule().stroke(Color.white.opacity(0.10), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
 
-            Text("Modelul rulează 100% pe device. Datele tale nu părăsesc telefonul.")
-                .font(.solCaption)
-                .foregroundStyle(Color.solMuted)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-                .padding(.top, SolSpacing.sm)
+    // MARK: - Error banner
+
+    @ViewBuilder
+    private func errorBanner(_ reason: String) -> some View {
+        SolInsightCard(
+            icon: "exclamationmark.triangle.fill",
+            label: "SOLOMON · EROARE",
+            timestamp: nil,
+            accent: .rose
+        ) {
+            Text(reason)
+                .font(.system(size: 13))
+                .foregroundStyle(Color.white.opacity(0.85))
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
+    // MARK: - Footer
+
     @ViewBuilder
-    private func infoRow(label: String, value: String, isSmall: Bool = false) -> some View {
-        HStack {
-            Text(label)
-                .font(.solCaption)
-                .foregroundStyle(Color.solMuted)
-            Spacer()
-            Text(value)
-                .font(isSmall ? .solCaption : .solBody)
-                .foregroundStyle(Color.solForeground)
-                .lineLimit(1)
-                .truncationMode(.middle)
+    private var footerNote: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "iphone")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.35))
+            Text("Datele tale rămân pe telefon")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.white.opacity(0.4))
         }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Helpers
 
-    private var heroIconName: String {
+    private var heroLabel: String {
         switch service.state {
-        case .loaded:           return "checkmark.shield.fill"
-        case .downloading:      return "arrow.down.circle.fill"
-        case .loadFailed:       return "exclamationmark.triangle.fill"
-        case .notDownloaded:    return "cpu"
+        case .loaded:           return "MODEL ACTIV · ON-DEVICE"
+        case .downloading:      return "DESCĂRCARE ÎN CURS"
+        case .loadFailed:       return "MODEL · EROARE"
+        case .notDownloaded:    return "MODEL · NEDESCĂRCAT"
         }
     }
 
-    private var heroIconVariant: IconContainer.Variant {
+    private var heroBadgeLabel: String {
         switch service.state {
-        case .loaded:           return .neon
-        case .downloading:      return .cyan
-        case .loadFailed:       return .danger
-        case .notDownloaded:    return .tinted
+        case .loaded:           return "ACTIV"
+        case .downloading:      return "DESCARC"
+        case .loadFailed:       return "EROARE"
+        case .notDownloaded:    return "OFF"
+        }
+    }
+
+    private var heroBadgeAccent: SolAccent {
+        switch service.state {
+        case .loaded:           return .mint
+        case .downloading:      return .blue
+        case .loadFailed:       return .rose
+        case .notDownloaded:    return .amber
+        }
+    }
+
+    private var heroStatusColor: Color {
+        switch service.state {
+        case .loaded:           return .solMintLight
+        case .downloading:      return Color(red: 0x93/255, green: 0xC5/255, blue: 0xFD/255)
+        case .loadFailed:       return .solRoseExact
+        case .notDownloaded:    return .solAmberExact
+        }
+    }
+
+    private func rowSubtitle(for cfg: MLXLLMProvider.Config) -> String {
+        let size = ByteCountFormatter.string(fromByteCount: cfg.approximateSizeBytes, countStyle: .binary)
+        switch cfg.modelId {
+        case MLXLLMProvider.Config.gemmaE2B.modelId:
+            return "\(size) · iPhone 14+"
+        case MLXLLMProvider.Config.gemma3_4b.modelId:
+            return "\(size) · iPhone 15 Pro+ · recomandat"
+        case MLXLLMProvider.Config.gemmaE4B.modelId:
+            return "\(size) · iPhone 15 Pro+"
+        default:
+            return size
         }
     }
 }

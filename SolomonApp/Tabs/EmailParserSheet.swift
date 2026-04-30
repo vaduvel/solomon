@@ -9,6 +9,9 @@ import SolomonEmail
 // și să-l transforme automat într-o tranzacție folosind EmailTransactionParser.
 //
 // Folosit ca alternativă la Shortcuts dacă userul nu are setup-ul.
+//
+// VISUAL: Solomon DS (Claude Design v3 editorial premium) — MeshBackground,
+// glass fields, hero card pentru preview/success, primary/secondary buttons din kit.
 
 struct EmailParserSheet: View {
 
@@ -21,52 +24,94 @@ struct EmailParserSheet: View {
     @State private var saveError: String?
     @State private var saved: Bool = false
 
+    @FocusState private var bodyFocused: Bool
+
     private let parser = EmailTransactionParser()
 
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.solCanvas.ignoresSafeArea()
+                MeshBackground()
 
                 ScrollView {
                     VStack(spacing: SolSpacing.lg) {
+                        sheetHandle
+                        headerBar
+                        titleBlock
 
                         if saved {
-                            successCard
+                            successBlock
                         } else if let parsed {
-                            previewCard(parsed)
+                            previewBlock(parsed)
                         } else {
                             inputForm
                         }
 
-                        Spacer()
+                        Spacer(minLength: SolSpacing.xxl)
                     }
-                    .padding(.horizontal, SolSpacing.screenHorizontal)
-                    .padding(.top, SolSpacing.lg)
+                    .padding(.horizontal, SolSpacing.xl)
+                    .padding(.top, SolSpacing.sm)
                     .padding(.bottom, SolSpacing.hh)
                 }
             }
-            .navigationTitle("Importă din email")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Închide") { dismiss() }
-                        .foregroundStyle(Color.solMuted)
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
         }
+    }
+
+    // MARK: - Header
+
+    @ViewBuilder
+    private var sheetHandle: some View {
+        Capsule()
+            .fill(Color.white.opacity(0.18))
+            .frame(width: 36, height: 5)
+            .padding(.top, SolSpacing.sm)
+            .padding(.bottom, SolSpacing.xs)
+    }
+
+    @ViewBuilder
+    private var headerBar: some View {
+        HStack(alignment: .center) {
+            SolBackButton { dismiss() }
+
+            Spacer()
+
+            Text("SOLOMON · IMPORT")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.45))
+                .tracking(1.4)
+                .textCase(.uppercase)
+
+            Spacer()
+
+            Color.clear.frame(width: 38, height: 38)
+        }
+        .padding(.bottom, SolSpacing.sm)
+    }
+
+    @ViewBuilder
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: SolSpacing.xs) {
+            Text("Importă din email")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(Color.white)
+                .tracking(-0.5)
+            Text("Lipește un email financiar — Solomon extrage automat tranzacția.")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.white.opacity(0.55))
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.bottom, SolSpacing.xs)
     }
 
     // MARK: - Input form
 
     @ViewBuilder
     private var inputForm: some View {
-        VStack(spacing: SolSpacing.md) {
-            VStack(alignment: .leading, spacing: SolSpacing.xs) {
-                Text("DE LA (FROM)")
-                    .font(.solMicro)
-                    .foregroundStyle(Color.solMuted)
-                    .tracking(1.2)
+        VStack(spacing: SolSpacing.base) {
+            fieldGroup(label: "DE LA (FROM)") {
                 SolomonTextInput(
                     placeholder: "ex: no-reply@glovoapp.com",
                     text: $fromEmail,
@@ -74,11 +119,7 @@ struct EmailParserSheet: View {
                 )
             }
 
-            VStack(alignment: .leading, spacing: SolSpacing.xs) {
-                Text("SUBIECT")
-                    .font(.solMicro)
-                    .foregroundStyle(Color.solMuted)
-                    .tracking(1.2)
+            fieldGroup(label: "SUBIECT") {
                 SolomonTextInput(
                     placeholder: "ex: Comanda confirmată",
                     text: $subject,
@@ -86,109 +127,172 @@ struct EmailParserSheet: View {
                 )
             }
 
-            VStack(alignment: .leading, spacing: SolSpacing.xs) {
-                Text("CONȚINUT EMAIL")
-                    .font(.solMicro)
-                    .foregroundStyle(Color.solMuted)
-                    .tracking(1.2)
-                TextEditor(text: $bodyText)
-                    .font(.solBody)
-                    .foregroundStyle(Color.solForeground)
-                    .scrollContentBackground(.hidden)
-                    .padding(SolSpacing.md)
-                    .frame(minHeight: 160)
-                    .background(Color.solCard)
-                    .clipShape(RoundedRectangle(cornerRadius: SolRadius.xl))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: SolRadius.xl)
-                            .stroke(Color.solBorder, lineWidth: 1)
-                    )
+            fieldGroup(label: "CONȚINUT EMAIL") {
+                ZStack(alignment: .topLeading) {
+                    if bodyText.isEmpty {
+                        Text("Lipește textul complet al emailului…")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Color.white.opacity(0.35))
+                            .padding(.horizontal, SolSpacing.base)
+                            .padding(.vertical, 14)
+                            .allowsHitTesting(false)
+                    }
+                    TextEditor(text: $bodyText)
+                        .focused($bodyFocused)
+                        .font(.system(size: 15))
+                        .foregroundStyle(Color.white)
+                        .scrollContentBackground(.hidden)
+                        .padding(.horizontal, SolSpacing.md)
+                        .padding(.vertical, SolSpacing.sm)
+                        .frame(minHeight: 160)
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(bodyFocused
+                              ? Color.solMintExact.opacity(0.04)
+                              : Color.white.opacity(0.04))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(bodyFocused
+                                ? Color.solMintExact.opacity(0.4)
+                                : Color.white.opacity(0.08),
+                                lineWidth: 1)
+                )
+                .animation(.smooth(duration: 0.2), value: bodyFocused)
             }
 
-            SolomonButton("Parseaza email", icon: "arrow.right") {
+            SolPrimaryButton("Parsează email", fullWidth: true) {
                 runParse()
             }
             .opacity(canParse ? 1 : 0.4)
             .disabled(!canParse)
+            .padding(.top, SolSpacing.sm)
         }
     }
 
     @ViewBuilder
-    private func previewCard(_ p: ParsedEmailTransaction) -> some View {
-        VStack(alignment: .leading, spacing: SolSpacing.md) {
-            Text("PREVIEW TRANZACȚIE")
-                .font(.solMicro)
-                .foregroundStyle(Color.solMuted)
-                .tracking(1.2)
+    private func fieldGroup<Content: View>(
+        label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.5))
+                .tracking(0.5)
+                .textCase(.uppercase)
+            content()
+        }
+    }
 
-            HStack(spacing: SolSpacing.md) {
-                IconContainer(systemName: "checkmark.circle.fill", variant: .neon, size: 44, iconSize: 18)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(p.merchant ?? "Tranzacție")
-                        .font(.solH3)
-                        .foregroundStyle(Color.solForeground)
-                    Text(p.suggestedCategory.displayNameRO)
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solMuted)
-                }
-                Spacer()
-                if let amount = p.amount {
-                    Text("\(amount.value) \(amount.currency.rawValue.uppercased())")
-                        .font(.solMonoMD)
-                        .foregroundStyle(Color.solDestructive)
-                }
-            }
-            .padding(SolSpacing.base)
-            .solCard()
+    // MARK: - Preview
+
+    @ViewBuilder
+    private func previewBlock(_ p: ParsedEmailTransaction) -> some View {
+        VStack(spacing: SolSpacing.lg) {
+            SolHeroCard(
+                accent: .mint,
+                content: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        SolHeroLabel(p.merchant ?? "TRANZACȚIE")
+                        if let amount = p.amount {
+                            let split = splitAmount(amount.value)
+                            SolHeroAmount(
+                                amount: split.whole,
+                                decimals: split.decimals,
+                                currency: amount.currency.rawValue.uppercased(),
+                                accent: .mint
+                            )
+                        } else {
+                            Text("Sumă indisponibilă")
+                                .font(.system(size: 22, weight: .semibold))
+                                .foregroundStyle(Color.white.opacity(0.7))
+                        }
+                        Text(p.suggestedCategory.displayNameRO)
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.white.opacity(0.55))
+                            .padding(.top, 4)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                },
+                badge: { SolHeroBadge("PARSED", accent: .mint) }
+            )
 
             HStack(spacing: SolSpacing.xs) {
-                StatusBadge(title: "Confidență \(Int(p.confidence * 100))%", kind: confidenceKind(p.confidence))
+                SolChip(
+                    "Confidență \(Int(p.confidence * 100))%",
+                    kind: confidenceChipKind(p.confidence)
+                )
                 Spacer()
             }
 
             if let err = saveError {
-                Text(err)
-                    .font(.solCaption)
-                    .foregroundStyle(Color.solDestructive)
+                SolInsightCard(
+                    icon: "exclamationmark.triangle.fill",
+                    label: "EROARE",
+                    accent: .rose,
+                    content: {
+                        Text(err)
+                            .font(.system(size: 14))
+                            .foregroundStyle(Color.white.opacity(0.85))
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                )
             }
 
             HStack(spacing: SolSpacing.sm) {
-                SolomonButton("Înapoi", style: .secondary) {
+                SolSecondaryButton("Înapoi", fullWidth: true) {
                     parsed = nil
+                    saveError = nil
                 }
-                SolomonButton("Salvează", icon: "checkmark") {
+                SolPrimaryButton("Salvează", fullWidth: true) {
                     saveTransaction(p)
                 }
-                .disabled(p.amount == nil)
                 .opacity(p.amount == nil ? 0.4 : 1)
+                .disabled(p.amount == nil)
             }
         }
-        .padding(SolSpacing.cardStandard)
-        .solCard()
     }
+
+    // MARK: - Success
 
     @ViewBuilder
-    private var successCard: some View {
+    private var successBlock: some View {
         VStack(spacing: SolSpacing.lg) {
-            IconContainer(systemName: "checkmark.circle.fill", variant: .neon, size: 80, iconSize: 36)
-            Text("Salvat ✓")
-                .font(.solH1)
-                .foregroundStyle(Color.solPrimary)
-            Text("Tranzacția a fost adăugată în portofel.")
-                .font(.solBody)
-                .foregroundStyle(Color.solMuted)
+            SolHeroCard(
+                accent: .mint,
+                content: {
+                    VStack(alignment: .leading, spacing: SolSpacing.sm) {
+                        SolHeroLabel("CONFIRMARE")
+                        Text("Tranzacția a fost adăugată.")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(Color.white)
+                            .tracking(-0.4)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("O găsești în portofel sau în Recent Activity.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color.white.opacity(0.55))
+                            .padding(.top, 2)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                },
+                badge: { SolHeroBadge("SALVAT ✓", accent: .mint) }
+            )
+
             HStack(spacing: SolSpacing.sm) {
-                SolomonButton("Mai parsez unul", style: .secondary) {
+                SolSecondaryButton("Mai parsez unul", fullWidth: true) {
                     reset()
                 }
-                SolomonButton("Gata") { dismiss() }
+                SolPrimaryButton("Gata", fullWidth: true) {
+                    dismiss()
+                }
             }
         }
-        .padding(SolSpacing.cardHero)
-        .solCard()
     }
 
-    // MARK: - Logic
+    // MARK: - Logic (UNCHANGED)
 
     private var canParse: Bool {
         !fromEmail.trimmingCharacters(in: .whitespaces).isEmpty &&
@@ -257,9 +361,19 @@ struct EmailParserSheet: View {
         saveError = nil
     }
 
-    private func confidenceKind(_ c: Double) -> StatusBadge.Kind {
-        if c >= 0.8 { return .success }
-        if c >= 0.5 { return .warning }
-        return .danger
+    private func confidenceChipKind(_ c: Double) -> SolChip.Kind {
+        if c >= 0.8 { return .mint }
+        if c >= 0.5 { return .warn }
+        return .rose
+    }
+
+    /// Format Int sumă → ("1 234", nil). Spaces ca grouping separator.
+    private func splitAmount(_ value: Int) -> (whole: String, decimals: String?) {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.groupingSeparator = " "
+        formatter.maximumFractionDigits = 0
+        let s = formatter.string(from: NSNumber(value: value)) ?? String(value)
+        return (s, nil)
     }
 }

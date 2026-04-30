@@ -7,292 +7,253 @@ import SwiftUI
 // la Solomon prin URL scheme `solomon://transaction?raw=...`
 //
 // Accesibil din: Settings → Conectează banca
+//
+// Redesenat 1:1 cu Solomon DS (Claude Design): MeshBackground, SolHeroCard,
+// SolInsightCard, SolListCard cu pași numerotați, SolPrimaryButton.
 
 struct ShortcutSetupView: View {
 
-    // MARK: - Supported Banks
+    // MARK: - Environment
 
-    struct SupportedBank: Identifiable {
+    @Environment(\.dismiss) private var dismiss
+
+    // MARK: - Steps Data
+
+    private struct SetupStep: Identifiable {
         let id = UUID()
-        let name: String
-        let icon: String          // SF Symbol sau emoji fallback
-        let appScheme: String?    // pentru „Deschide aplicația" check
-        let notificationExample: String
+        let title: String
+        let detail: String
+        let icon: String
     }
 
-    static let banks: [SupportedBank] = [
-        SupportedBank(
-            name: "Banca Transilvania (BT)",
-            icon: "🏦",
-            appScheme: nil,
-            notificationExample: "Plată 65,00 RON la Glovo App"
+    private let steps: [SetupStep] = [
+        SetupStep(
+            title: "Deschide Shortcuts",
+            detail: "Lansează aplicația Shortcuts (pre-instalată pe iPhone).",
+            icon: "app.badge"
         ),
-        SupportedBank(
-            name: "ING România",
-            icon: "🧡",
-            appScheme: nil,
-            notificationExample: "Ai plătit 65,00 RON la Glovo Food"
+        SetupStep(
+            title: "Apasă „+\" creează shortcut nou",
+            detail: "În tab-ul Automation, apasă „+\" și alege Personal Automation.",
+            icon: "plus.square.on.square"
         ),
-        SupportedBank(
-            name: "Raiffeisen Bank",
-            icon: "🦅",
-            appScheme: nil,
-            notificationExample: "Plată card: 65,00 RON la GLOVO"
+        SetupStep(
+            title: "Adaugă acțiunea „When notification\"",
+            detail: "Selectează trigger-ul „Notification\" și alege aplicația băncii.",
+            icon: "bell.badge"
         ),
-        SupportedBank(
-            name: "BCR",
-            icon: "🏛",
-            appScheme: nil,
-            notificationExample: "Ai efectuat o plată de 65,00 RON la Glovo"
-        ),
-        SupportedBank(
-            name: "Revolut",
-            icon: "⚫️",
-            appScheme: nil,
-            notificationExample: "Ai plătit 65 RON lui Glovo Food"
-        ),
-        SupportedBank(
-            name: "CEC Bank",
-            icon: "🏦",
-            appScheme: nil,
-            notificationExample: "Tranzactie card: -65.00 RON Glovo"
-        ),
+        SetupStep(
+            title: "Wire-uire la Solomon",
+            detail: "Adaugă „Open URL\" cu solomon://transaction?raw=[Notification Content].",
+            icon: "link"
+        )
     ]
-
-    // MARK: - State
-
-    @State private var selectedBank: SupportedBank? = nil
-    @State private var currentStep: Int = 0
-    @Environment(\.dismiss) private var dismiss
 
     // MARK: - Body
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: SolSpacing.lg) {
+            ZStack {
+                MeshBackground(
+                    topLeftAccent: .mint,
+                    midRightAccent: .blue,
+                    bottomLeftAccent: .violet
+                )
 
-                    headerSection
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: SolSpacing.base) {
 
-                    bankListSection
-
-                    if selectedBank != nil {
-                        stepsSection
+                        sheetHandle
+                        headerBar
+                        heroSection
+                        whyInsight
+                        stepsHeader
+                        stepsList
+                        ctaButtons
                     }
-
-                    testSection
-                }
-                .padding(.horizontal, SolSpacing.screenHorizontal)
-                .padding(.bottom, SolSpacing.hh)
-            }
-            .background(Color.solCanvas)
-            .navigationTitle("Conectează banca")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Gata") { dismiss() }
-                        .foregroundStyle(Color.solMint)
+                    .padding(.horizontal, SolSpacing.screenHorizontal)
+                    .padding(.bottom, SolSpacing.hh)
                 }
             }
+            .toolbar(.hidden, for: .navigationBar)
         }
     }
 
     // MARK: - Sections
 
-    private var headerSection: some View {
-        VStack(alignment: .leading, spacing: SolSpacing.sm) {
-            Text("Cum funcționează")
-                .font(.solHeadline)
-                .foregroundStyle(Color.solText)
-
-            Text("Solomon citește notificările bancare prin iOS Shortcuts — o funcție nativă Apple. Datele nu părăsesc telefonul tău.")
-                .font(.solBody)
-                .foregroundStyle(Color.solTextSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: SolSpacing.md) {
-                flowBubble(icon: "bell", text: "Notificare bancă")
-                Image(systemName: "arrow.right")
-                    .foregroundStyle(Color.solTextTertiary)
-                flowBubble(icon: "app.shortcut", text: "Shortcuts")
-                Image(systemName: "arrow.right")
-                    .foregroundStyle(Color.solTextTertiary)
-                flowBubble(icon: "chart.bar", text: "Solomon")
-            }
-            .padding(.top, SolSpacing.xs)
+    private var sheetHandle: some View {
+        HStack {
+            Spacer()
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(Color.white.opacity(0.18))
+                .frame(width: 36, height: 5)
+            Spacer()
         }
-        .padding(SolSpacing.md)
-        .solCard()
+        .padding(.top, 8)
+        .padding(.bottom, 4)
     }
 
-    private var bankListSection: some View {
-        VStack(alignment: .leading, spacing: SolSpacing.sm) {
-            Text("Selectează banca ta")
-                .font(.solHeadline)
-                .foregroundStyle(Color.solText)
+    private var headerBar: some View {
+        HStack(alignment: .center, spacing: 12) {
+            SolBackButton { dismiss() }
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())],
-                      spacing: SolSpacing.sm) {
-                ForEach(Self.banks) { bank in
-                    bankChip(bank)
+            VStack(alignment: .center, spacing: 4) {
+                Text("SOLOMON · SHORTCUTS")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.solMintExact)
+                    .tracking(1.4)
+                    .textCase(.uppercase)
+                Text("Conectează banca prin Shortcut")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .tracking(-0.4)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+            }
+            .frame(maxWidth: .infinity)
+
+            // Spacer pentru a echilibra back-ul (lățime 38)
+            Color.clear.frame(width: 38, height: 38)
+        }
+        .padding(.bottom, SolSpacing.sm)
+    }
+
+    private var heroSection: some View {
+        SolHeroCard(accent: .blue) {
+            VStack(alignment: .leading, spacing: 6) {
+                SolHeroLabel("AUTOMATIZARE NATIVĂ · IOS")
+
+                Text("Ascult automat")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .tracking(-0.6)
+                    .padding(.top, 4)
+
+                Text("Solomon ascultă notificările bancare automat — fără să mai introduci nimic manual.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.white.opacity(0.7))
+                    .lineSpacing(2)
+                    .padding(.top, 6)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } badge: {
+            SolHeroBadge("AUTOMATIZARE", accent: .blue)
+        }
+    }
+
+    private var whyInsight: some View {
+        SolInsightCard(
+            icon: "lock.shield",
+            label: "DE CE?",
+            timestamp: "100% local",
+            accent: .blue
+        ) {
+            whyInsightAttributedText
+                .font(.system(size: 14))
+                .lineSpacing(2)
+        }
+    }
+
+    private var stepsHeader: some View {
+        SolSectionHeaderRow("PAȘII", meta: "\(steps.count) pași · 2 minute")
+            .padding(.top, SolSpacing.sm)
+    }
+
+    private var whyInsightAttributedText: Text {
+        var attr = AttributedString("Notificările tale nu părăsesc telefonul. iOS Shortcuts e o funcție nativă Apple — Solomon doar primește textul prin URL scheme și îl procesează ")
+        attr.foregroundColor = .white.opacity(0.85)
+        var local = AttributedString("local")
+        local.foregroundColor = .solBlueExact
+        local.font = .system(size: 14, weight: .medium)
+        attr += local
+        var rest = AttributedString(", on-device. Nimic în cloud.")
+        rest.foregroundColor = .white.opacity(0.85)
+        attr += rest
+        return Text(attr)
+    }
+
+    private var stepsList: some View {
+        SolListCard {
+            ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
+                stepRow(number: index + 1, step: step)
+                if index < steps.count - 1 {
+                    SolHairlineDivider()
                 }
             }
         }
     }
 
-    private var stepsSection: some View {
-        VStack(alignment: .leading, spacing: SolSpacing.sm) {
-            Text("Pași de configurare")
-                .font(.solHeadline)
-                .foregroundStyle(Color.solText)
-
-            VStack(spacing: 0) {
-                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
-                    stepRow(number: index + 1, title: step.title, detail: step.detail)
-                    if index < steps.count - 1 {
-                        Divider()
-                            .background(Color.solBorder)
-                            .padding(.leading, 52)
-                    }
-                }
+    private var ctaButtons: some View {
+        VStack(spacing: SolSpacing.sm) {
+            SolPrimaryButton(
+                "Deschide Shortcuts",
+                accent: .mint,
+                fullWidth: true,
+                action: openShortcutsApp
+            )
+            .overlay(alignment: .trailing) {
+                Image(systemName: "arrow.up.right.square")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color(red: 0x05/255, green: 0x2E/255, blue: 0x16/255))
+                    .padding(.trailing, 18)
+                    .allowsHitTesting(false)
             }
-            .solCard()
-        }
-    }
 
-    private var testSection: some View {
-        VStack(alignment: .leading, spacing: SolSpacing.sm) {
-            Text("Testează conexiunea")
-                .font(.solHeadline)
-                .foregroundStyle(Color.solText)
-
-            VStack(alignment: .leading, spacing: SolSpacing.sm) {
-                Text("Trimite o notificare de test spre Solomon:")
-                    .font(.solBody)
-                    .foregroundStyle(Color.solTextSecondary)
-
-                if let bank = selectedBank {
-                    Text(bank.notificationExample)
-                        .font(.solMono)
-                        .foregroundStyle(Color.solMint)
-                        .padding(SolSpacing.sm)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.solElevated)
-                        .clipShape(RoundedRectangle(cornerRadius: SolRadius.sm))
-                }
-
-                SolomonButton("Deschide Shortcuts", action: openShortcutsApp)
+            SolSecondaryButton("Mai târziu", fullWidth: true) {
+                dismiss()
             }
-            .padding(SolSpacing.md)
-            .solCard()
         }
+        .padding(.top, SolSpacing.sm)
     }
 
     // MARK: - Subviews
 
-    private func bankChip(_ bank: SupportedBank) -> some View {
-        Button(action: { selectedBank = bank }) {
-            HStack(spacing: SolSpacing.xs) {
-                Text(bank.icon)
-                    .font(.system(size: 20))
-                Text(bank.name.components(separatedBy: " ").prefix(2).joined(separator: " "))
-                    .font(.solCaption)
-                    .foregroundStyle(
-                        selectedBank?.id == bank.id ? Color.solCanvas : Color.solText
-                    )
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, SolSpacing.sm)
-            .padding(.horizontal, SolSpacing.xs)
-            .background(
-                selectedBank?.id == bank.id ? Color.solMint : Color.solSurface
-            )
-            .clipShape(RoundedRectangle(cornerRadius: SolRadius.md))
-            .overlay(
-                RoundedRectangle(cornerRadius: SolRadius.md)
-                    .stroke(
-                        selectedBank?.id == bank.id ? Color.clear : Color.solBorder,
-                        lineWidth: 1
-                    )
-            )
-        }
-        .buttonStyle(.plain)
-    }
+    private func stepRow(number: Int, step: SetupStep) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            // Număr mare mint (recover-step pattern din spiral.html)
+            Text("\(number)")
+                .font(.system(size: 28, weight: .semibold, design: .default))
+                .foregroundStyle(Color.solMintExact)
+                .tracking(-0.8)
+                .monospacedDigit()
+                .frame(width: 32, alignment: .leading)
+                .shadow(color: Color.solMintExact.opacity(0.3), radius: 8)
 
-    private func flowBubble(icon: String, text: String) -> some View {
-        VStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.system(size: 18))
-                .foregroundStyle(Color.solMint)
-            Text(text)
-                .font(.solCaption)
-                .foregroundStyle(Color.solTextSecondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-    }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(step.title)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color.white)
+                    .fixedSize(horizontal: false, vertical: true)
 
-    private func stepRow(number: Int, title: String, detail: String) -> some View {
-        HStack(alignment: .top, spacing: SolSpacing.md) {
-            ZStack {
-                Circle()
-                    .fill(Color.solMint.opacity(0.15))
-                    .frame(width: 32, height: 32)
-                Text("\(number)")
-                    .font(.solBodyBold)
-                    .foregroundStyle(Color.solMint)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.solBodyBold)
-                    .foregroundStyle(Color.solText)
-                Text(detail)
-                    .font(.solBody)
-                    .foregroundStyle(Color.solTextSecondary)
+                Text(step.detail)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.white.opacity(0.5))
+                    .lineSpacing(1.5)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Icon ilustrativ pe dreapta
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(SolAccent.mint.iconGradient)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.solMintExact.opacity(0.25), lineWidth: 1)
+                    )
+                Image(systemName: step.icon)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color.solMintExact)
+            }
+            .frame(width: 32, height: 32)
+            .shadow(color: Color.solMintExact.opacity(0.15), radius: 8)
         }
-        .padding(SolSpacing.md)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
     }
 
-    // MARK: - Steps Data
-
-    var steps: [(title: String, detail: String)] {
-        let bankName = selectedBank?.name ?? "banca ta"
-        let example = selectedBank?.notificationExample ?? "Plată 65,00 RON la Magazin"
-
-        return [
-            (
-                "Deschide Shortcuts",
-                "Accesează aplicația Shortcuts (pre-instalată pe iPhone)"
-            ),
-            (
-                "Automatizare nouă",
-                "Apasă Automatizare → + (colț dreapta sus) → Automatizare personală"
-            ),
-            (
-                "Trigger: Notificare",
-                "Selectează «Notificare» → Aplicație: \(bankName) → Apasă OK"
-            ),
-            (
-                "Acțiune: Deschide URL",
-                "Adaugă acțiunea «Deschide URL» → URL: solomon://transaction?raw=[Conținut notificare]"
-            ),
-            (
-                "Dezactivează confirmarea",
-                "Dezactivează «Întreabă înainte de a rula» → Salvează"
-            ),
-            (
-                "Testează",
-                "Trimitți o plată de test (ex: \(example)) → Solomon o va procesa automat"
-            ),
-        ]
-    }
-
-    // MARK: - Actions
+    // MARK: - Actions (business logic preserved)
 
     private func openShortcutsApp() {
         if let url = URL(string: "shortcuts://") {
