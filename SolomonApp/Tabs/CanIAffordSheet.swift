@@ -6,11 +6,20 @@ import SolomonMoments
 import SolomonLLM
 import SolomonWeb
 
-// MARK: - CanIAffordSheet
+// MARK: - CanIAffordSheet (Claude Design v3)
 //
-// Bottom sheet pentru întrebarea „Pot să-mi permit X?".
-// User: tastează sumă (+ opțional descriere) → Solomon răspunde cu verdict +
-// matematica vizibilă, folosind SafeToSpendCalculator + CanIAffordBuilder.
+// Pixel-fidel cu `Solomon DS / screens/can-i-afford.html`:
+//   - MeshBackground full-screen
+//   - Sheet handle (36×5 capsule) + header back button + brand "SOLOMON · ASK"
+//   - Calc display: PREȚ label + amount mare gradient + descriere context
+//   - Numpad 4×3 cu glass keys
+//   - Verdict: SolHeroCard cu accent dinamic (mint / amber / rose) după Verdict
+//   - Math vizibilă în SolListCard (3 verdict-rows: balance, obligații, per-zi)
+//   - Scam alert (rose) + LLM response InsightCard + web snippet
+//   - Butoane "Întreabă altceva" / "Gata"
+//
+// Business logic păstrat 1:1: SafeToSpendCalculator, ScamPatternMatcher,
+// SolomonWebClient, CanIAffordBuilder + CanIAffordContext, parsing logic.
 
 struct CanIAffordSheet: View {
 
@@ -30,83 +39,202 @@ struct CanIAffordSheet: View {
     private let scamMatcher = ScamPatternMatcher()
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.solCanvas.ignoresSafeArea()
+        ZStack {
+            MeshBackground(
+                topLeftAccent: heroAccent,
+                midRightAccent: .blue,
+                bottomLeftAccent: .violet
+            )
+
+            VStack(spacing: 0) {
+                // Sheet handle (36×5 pill)
+                sheetHandle
 
                 ScrollView {
-                    VStack(spacing: SolSpacing.lg) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Header bar: back + centered brand+title
+                        headerBar
+                            .padding(.bottom, 8)
+
                         if verdict != nil {
-                            verdictCard
+                            // Verdict mode
+                            calcDisplay
+                            verdictHero
+                            if !mathRows.isEmpty {
+                                SolSectionHeaderRow("ANALIZĂ", meta: "\(mathRows.count) verificări")
+                                    .padding(.top, 4)
+                                analysisList
+                            }
+                            if isScamRisk {
+                                scamAlert
+                            }
+                            if let llm = llmResponse, !llm.isEmpty {
+                                llmResponseCard(llm)
+                            }
+                            if let snippet = webSnippet, !snippet.isEmpty {
+                                webSnippetCard(snippet)
+                            }
+                            actionButtons
+                                .padding(.top, 4)
                         } else {
-                            amountInputSection
+                            // Input mode
+                            descriptionField
+                            calcDisplay
+                            numberPad
+                                .padding(.top, 4)
+                            askButton
+                                .padding(.top, 4)
                         }
-                        Spacer()
+
+                        Spacer(minLength: 32)
                     }
-                    .padding(.horizontal, SolSpacing.screenHorizontal)
-                    .padding(.top, SolSpacing.lg)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 8)
                     .padding(.bottom, SolSpacing.hh)
                 }
             }
-            .navigationTitle("Pot să-mi permit?")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Închide") { dismiss() }
-                        .foregroundStyle(Color.solMuted)
-                }
-            }
         }
+        .toolbar(.hidden, for: .navigationBar)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.hidden)
     }
 
-    // MARK: - Amount input
+    // MARK: - Sheet handle
 
     @ViewBuilder
-    private var amountInputSection: some View {
-        VStack(spacing: SolSpacing.lg) {
-            HStack(alignment: .firstTextBaseline, spacing: SolSpacing.xs) {
-                Text(amountText)
-                    .font(.system(size: 56, weight: .bold, design: .monospaced))
-                    .foregroundStyle(LinearGradient.solHero)
-                    .monospacedDigit()
-                Text("RON")
-                    .font(.solH2)
-                    .foregroundStyle(Color.solMuted)
-            }
-            .padding(.vertical, SolSpacing.lg)
+    private var sheetHandle: some View {
+        Capsule()
+            .fill(Color.white.opacity(0.18))
+            .frame(width: 36, height: 5)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+    }
 
-            VStack(alignment: .leading, spacing: SolSpacing.xs) {
-                Text("CE CUMPERI? (OPȚIONAL)")
-                    .font(.solMicro)
-                    .foregroundStyle(Color.solMuted)
-                    .tracking(1.2)
-                SolomonTextInput(
-                    placeholder: "ex: pizza de la Glovo",
-                    text: $description,
-                    icon: "cart"
-                )
+    // MARK: - Header bar (back + centered title)
+
+    @ViewBuilder
+    private var headerBar: some View {
+        HStack(alignment: .center) {
+            SolBackButton { dismiss() }
+
+            Spacer(minLength: 0)
+
+            VStack(spacing: 4) {
+                Text("SOLOMON · ASK")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.45))
+                    .tracking(1.4)
+                    .textCase(.uppercase)
+                Text("Pot să-mi permit?")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .tracking(-0.4)
             }
 
-            numberPad
+            Spacer(minLength: 0)
 
-            SolomonButton(
-                "Solomon, pot?",
-                isLoading: isCalculating,
-                icon: "arrow.right"
-            ) {
-                Task { await calculate() }
-            }
-            .opacity(amountValue > 0 ? 1 : 0.4)
-            .disabled(amountValue == 0 || isCalculating)
+            // Spacer to balance back button
+            Color.clear.frame(width: 38, height: 38)
         }
     }
+
+    // MARK: - Description field (label + input)
+
+    @ViewBuilder
+    private var descriptionField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("OBIECTUL")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.5))
+                .tracking(0.5)
+                .textCase(.uppercase)
+
+            TextField("", text: $description, prompt:
+                Text("ex: pizza de la Glovo")
+                    .foregroundStyle(Color.white.opacity(0.35))
+            )
+            .font(.system(size: 15, weight: .medium))
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.white.opacity(0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+        }
+    }
+
+    // MARK: - Calc display (label + big amount + ctx)
+
+    @ViewBuilder
+    private var calcDisplay: some View {
+        VStack(spacing: 4) {
+            Text("PREȚ")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.4))
+                .tracking(0.5)
+
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(formattedAmount)
+                    .font(.system(size: 48, weight: .semibold))
+                    .foregroundStyle(amountGradient)
+                    .tracking(-2)
+                    .monospacedDigit()
+                Text("RON")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.4))
+            }
+            .padding(.top, 2)
+
+            if !description.isEmpty {
+                Text(description)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.white.opacity(0.55))
+                    .padding(.top, 2)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private var amountGradient: LinearGradient {
+        LinearGradient(
+            colors: [Color.white, Color.white.opacity(0.85)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var formattedAmount: String {
+        RomanianMoneyFormatter.thousands(amountValue)
+    }
+
+    // MARK: - Number pad (4 rows × 3 cols)
 
     @ViewBuilder
     private var numberPad: some View {
-        let rows: [[String]] = [["1","2","3"], ["4","5","6"], ["7","8","9"], ["", "0", "⌫"]]
-        VStack(spacing: SolSpacing.sm) {
-            ForEach(0..<rows.count, id: \.self) { rowIndex in
-                HStack(spacing: SolSpacing.sm) {
+        let rows: [[String]] = [
+            ["1","2","3"],
+            ["4","5","6"],
+            ["7","8","9"],
+            ["",  "0", "⌫"]
+        ]
+        VStack(spacing: 8) {
+            ForEach(rows.indices, id: \.self) { rowIndex in
+                HStack(spacing: 8) {
                     ForEach(rows[rowIndex], id: \.self) { key in
                         padKey(key)
                     }
@@ -118,111 +246,375 @@ struct CanIAffordSheet: View {
     @ViewBuilder
     private func padKey(_ key: String) -> some View {
         Button {
+            Haptics.light()
             tapKey(key)
         } label: {
             Group {
                 if key == "⌫" {
                     Image(systemName: "delete.left")
                         .font(.system(size: 22, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.85))
                 } else if !key.isEmpty {
                     Text(key)
-                        .font(.system(size: 28, weight: .medium))
+                        .font(.system(size: 26, weight: .medium))
+                        .foregroundStyle(Color.white)
                 } else {
                     Color.clear
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 52)
-            .foregroundStyle(Color.solForeground)
-            .background(key.isEmpty ? Color.clear : Color.solCard)
-            .clipShape(RoundedRectangle(cornerRadius: SolRadius.lg))
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .background(
+                Group {
+                    if key.isEmpty {
+                        Color.clear
+                    } else {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.white.opacity(0.04))
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        }
+                    }
+                }
+            )
         }
+        .buttonStyle(.plain)
         .disabled(key.isEmpty)
     }
 
-    // MARK: - Verdict
+    // MARK: - Ask button
 
     @ViewBuilder
-    private var verdictCard: some View {
+    private var askButton: some View {
+        Button {
+            Haptics.medium()
+            Task { await calculate() }
+        } label: {
+            HStack(spacing: 8) {
+                if isCalculating {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(Color(red: 0x05/255, green: 0x2E/255, blue: 0x16/255))
+                        .scaleEffect(0.85)
+                } else {
+                    Text("Solomon, pot?")
+                        .font(.system(size: 14, weight: .semibold))
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+            }
+            .foregroundStyle(Color(red: 0x05/255, green: 0x2E/255, blue: 0x16/255))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(SolAccent.mint.primaryButtonGradient)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.white.opacity(0.20), lineWidth: 1)
+                    .blendMode(.plusLighter)
+            )
+            .shadow(color: Color.solMintExact.opacity(0.4), radius: 12, x: 0, y: 4)
+            .opacity(amountValue > 0 ? 1 : 0.45)
+        }
+        .buttonStyle(.plain)
+        .disabled(amountValue == 0 || isCalculating)
+    }
+
+    // MARK: - Verdict hero
+
+    @ViewBuilder
+    private var verdictHero: some View {
         if let v = verdict {
-            verdictCardImpl(v: v)
+            SolHeroCard(accent: heroAccent) {
+                VStack(alignment: .leading, spacing: 6) {
+                    SolHeroLabel("SOLOMON SUGEREAZĂ")
+
+                    Text(headlineText(for: v))
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .tracking(-0.6)
+                        .padding(.top, 6)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(detailText(for: v))
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.white.opacity(0.65))
+                        .lineSpacing(2)
+                        .padding(.top, 4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } badge: {
+                SolHeroBadge("VERDICT", accent: heroAccent)
+            }
         }
     }
 
-    @ViewBuilder
-    private func verdictCardImpl(v: SafeToSpendBudget.Verdict) -> some View {
-        VStack(alignment: .leading, spacing: SolSpacing.lg) {
-            switch v {
-            case .yes(let perDay):
-                IconContainer(systemName: "checkmark.circle.fill", variant: .neon, size: 56, iconSize: 24)
-                Text("Da, poți. ✓")
-                    .font(.solH1)
-                    .foregroundStyle(Color.solPrimary)
-                Text("După această cheltuială rămân \(perDay.amount) RON/zi pentru \(calculatedBudget?.daysUntilNextPayday ?? 0) zile.")
-                    .font(.solBody)
-                    .foregroundStyle(Color.solForeground)
-
-            case .yesWithCaution(_, let perDay):
-                IconContainer(systemName: "exclamationmark.triangle.fill", variant: .warn, size: 56, iconSize: 24)
-                Text("Da, dar e strâns.")
-                    .font(.solH1)
-                    .foregroundStyle(Color.solWarning)
-                Text("După plată rămân doar \(perDay.amount) RON/zi până la salariu. Atenție la celelalte cheltuieli.")
-                    .font(.solBody)
-                    .foregroundStyle(Color.solForeground)
-
-            case .no(let reason):
-                IconContainer(systemName: "xmark.octagon.fill", variant: .danger, size: 56, iconSize: 24)
-                Text("Nu acum.")
-                    .font(.solH1)
-                    .foregroundStyle(Color.solDestructive)
-                Text(reasonText(reason))
-                    .font(.solBody)
-                    .foregroundStyle(Color.solForeground)
-            }
-
-            if isScamRisk {
-                HStack(spacing: SolSpacing.sm) {
-                    Image(systemName: "exclamationmark.shield.fill")
-                        .foregroundStyle(Color.solDestructive)
-                    Text("Solomon a detectat risc de scam în descriere. Verifică sursa înainte să plătești.")
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solDestructive)
-                }
-                .padding(SolSpacing.base)
-                .background(Color.solDestructive.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: SolRadius.lg))
-            }
-
-            if let llm = llmResponse {
-                Divider().background(Color.solBorder)
-                Text(llm)
-                    .font(.solBody)
-                    .foregroundStyle(Color.solMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if let snippet = webSnippet {
-                Divider().background(Color.solBorder)
-                VStack(alignment: .leading, spacing: SolSpacing.xs) {
-                    Label("Context web", systemImage: "globe")
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solMuted)
-                    Text(snippet)
-                        .font(.solCaption)
-                        .foregroundStyle(Color.solForeground)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            HStack(spacing: SolSpacing.sm) {
-                SolomonButton("Întreabă altceva", style: .secondary) { reset() }
-                SolomonButton("Gata", action: { dismiss() })
-            }
-            .padding(.top, SolSpacing.md)
+    private var heroAccent: SolAccent {
+        guard let v = verdict else { return .mint }
+        switch v {
+        case .yes:             return .mint
+        case .yesWithCaution:  return .amber
+        case .no:              return .rose
         }
-        .padding(SolSpacing.cardHero)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .solCard()
+    }
+
+    private func headlineText(for v: SafeToSpendBudget.Verdict) -> String {
+        switch v {
+        case .yes:             return "Da, poți cumpăra."
+        case .yesWithCaution:  return "Da, dar e strâns."
+        case .no:              return "Nu acum."
+        }
+    }
+
+    private func detailText(for v: SafeToSpendBudget.Verdict) -> String {
+        let days = calculatedBudget?.daysUntilNextPayday ?? 0
+        switch v {
+        case .yes(let perDay):
+            return "După această cheltuială rămân \(RomanianMoneyFormatter.format(perDay))/zi pentru \(days) zile până la salariu."
+        case .yesWithCaution(_, let perDay):
+            return "După plată rămân doar \(RomanianMoneyFormatter.format(perDay))/zi până la salariu. Atenție la celelalte cheltuieli."
+        case .no(let reason):
+            return reasonText(reason)
+        }
+    }
+
+    // MARK: - Math (analysis list)
+
+    private struct MathRow: Identifiable {
+        let id = UUID()
+        let icon: String
+        let kind: SolChip.Kind   // mint / warn / rose
+        let text: AttributedString
+        let value: String
+        let valueAccent: SolChip.Kind
+    }
+
+    private var mathRows: [MathRow] {
+        guard let b = calculatedBudget else { return [] }
+        let asked = Money(amountValue)
+        let after = b.availableAfterObligations - asked
+        let perDayAfter = b.daysUntilNextPayday > 0
+            ? Money(after.amount / b.daysUntilNextPayday)
+            : after
+
+        let pctOfPrice: Int = {
+            guard amountValue > 0 else { return 0 }
+            return Int(Double(b.availableAfterObligations.amount) / Double(amountValue) * 100)
+        }()
+
+        var rows: [MathRow] = []
+
+        // Row 1 — safe-to-spend coverage
+        rows.append(
+            MathRow(
+                icon: "checkmark",
+                kind: pctOfPrice >= 100 ? .mint : .warn,
+                text: makeText(
+                    "Disponibil acoperă ",
+                    boldPart: "\(min(pctOfPrice, 999))%",
+                    suffix: " din preț azi"
+                ),
+                value: RomanianMoneyFormatter.thousands(b.availableAfterObligations.amount),
+                valueAccent: .mint
+            )
+        )
+
+        // Row 2 — obligations remaining
+        if b.obligationsRemaining.amount > 0 {
+            rows.append(
+                MathRow(
+                    icon: "exclamationmark",
+                    kind: .warn,
+                    text: makeText(
+                        "Obligații rămase de plătit până la salariu",
+                        boldPart: nil,
+                        suffix: ""
+                    ),
+                    value: "−\(RomanianMoneyFormatter.thousands(b.obligationsRemaining.amount))",
+                    valueAccent: .warn
+                )
+            )
+        }
+
+        // Row 3 — per-day after purchase
+        let perDayKind: SolChip.Kind = {
+            switch verdict {
+            case .yes:             return .mint
+            case .yesWithCaution:  return .warn
+            case .no, .none:       return .rose
+            }
+        }()
+        rows.append(
+            MathRow(
+                icon: perDayKind == .rose ? "xmark" : (perDayKind == .warn ? "exclamationmark" : "checkmark"),
+                kind: perDayKind,
+                text: makeText(
+                    "După cumpărare, rămân ",
+                    boldPart: "\(RomanianMoneyFormatter.format(perDayAfter))",
+                    suffix: " / \(b.daysUntilNextPayday) zile"
+                ),
+                value: "\(RomanianMoneyFormatter.thousands(perDayAfter.amount))/zi",
+                valueAccent: perDayKind
+            )
+        )
+
+        return rows
+    }
+
+    private func makeText(_ prefix: String, boldPart: String?, suffix: String) -> AttributedString {
+        var a = AttributedString(prefix)
+        a.foregroundColor = Color.white.opacity(0.85)
+        a.font = .system(size: 13)
+        if let bold = boldPart {
+            var b = AttributedString(bold)
+            b.foregroundColor = Color.white
+            b.font = .system(size: 13, weight: .semibold)
+            a.append(b)
+        }
+        if !suffix.isEmpty {
+            var s = AttributedString(suffix)
+            s.foregroundColor = Color.white.opacity(0.85)
+            s.font = .system(size: 13)
+            a.append(s)
+        }
+        return a
+    }
+
+    @ViewBuilder
+    private var analysisList: some View {
+        SolListCard {
+            ForEach(Array(mathRows.enumerated()), id: \.element.id) { (idx, row) in
+                if idx > 0 {
+                    SolHairlineDivider()
+                }
+                HStack(alignment: .center, spacing: 10) {
+                    // Verdict icon (28×28)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(rowIconBg(row.kind))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(rowIconBorder(row.kind), lineWidth: 1)
+                            )
+                        Image(systemName: row.icon)
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(rowIconColor(row.kind))
+                    }
+                    .frame(width: 28, height: 28)
+
+                    Text(row.text)
+                        .lineSpacing(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text(row.value)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(rowIconColor(row.valueAccent))
+                        .monospacedDigit()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+            }
+        }
+    }
+
+    private func rowIconBg(_ kind: SolChip.Kind) -> Color {
+        switch kind {
+        case .mint:   return Color.solMintExact.opacity(0.15)
+        case .warn:   return Color.solAmberExact.opacity(0.15)
+        case .rose:   return Color.solRoseExact.opacity(0.15)
+        case .blue:   return Color.solBlueExact.opacity(0.15)
+        case .violet: return Color.solVioletExact.opacity(0.15)
+        case .muted:  return Color.white.opacity(0.05)
+        }
+    }
+    private func rowIconBorder(_ kind: SolChip.Kind) -> Color {
+        switch kind {
+        case .mint:   return Color.solMintExact.opacity(0.25)
+        case .warn:   return Color.solAmberExact.opacity(0.25)
+        case .rose:   return Color.solRoseExact.opacity(0.30)
+        case .blue:   return Color.solBlueExact.opacity(0.25)
+        case .violet: return Color.solVioletExact.opacity(0.25)
+        case .muted:  return Color.white.opacity(0.08)
+        }
+    }
+    private func rowIconColor(_ kind: SolChip.Kind) -> Color {
+        switch kind {
+        case .mint:   return .solMintExact
+        case .warn:   return .solAmberExact
+        case .rose:   return .solRoseExact
+        case .blue:   return .solBlueExact
+        case .violet: return .solVioletExact
+        case .muted:  return Color.white.opacity(0.5)
+        }
+    }
+
+    // MARK: - Scam alert
+
+    @ViewBuilder
+    private var scamAlert: some View {
+        SolInsightCard(
+            icon: "exclamationmark.shield.fill",
+            label: "ATENȚIE · POSIBIL SCAM",
+            timestamp: nil,
+            accent: .rose
+        ) {
+            Text("Solomon a detectat semnale de scam în descriere. Verifică sursa și nu plăti până ești sigur.")
+                .font(.system(size: 14))
+                .foregroundStyle(Color.white.opacity(0.85))
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: - LLM response
+
+    @ViewBuilder
+    private func llmResponseCard(_ text: String) -> some View {
+        SolInsightCard(
+            icon: "sparkles",
+            label: "SOLOMON SPUNE",
+            timestamp: "acum",
+            accent: heroAccent
+        ) {
+            Text(text)
+                .font(.system(size: 14))
+                .foregroundStyle(Color.white.opacity(0.85))
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: - Web snippet
+
+    @ViewBuilder
+    private func webSnippetCard(_ text: String) -> some View {
+        SolInsightCard(
+            icon: "globe",
+            label: "CONTEXT WEB",
+            timestamp: nil,
+            accent: .blue
+        ) {
+            Text(text)
+                .font(.system(size: 13))
+                .foregroundStyle(Color.white.opacity(0.75))
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: - Action buttons
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        HStack(spacing: 8) {
+            SolSecondaryButton("Întreabă altceva", fullWidth: true) {
+                reset()
+            }
+            SolPrimaryButton("Gata", accent: .mint, fullWidth: true) {
+                dismiss()
+            }
+        }
     }
 
     private func reasonText(_ reason: CanIAffordVerdictReason) -> String {
@@ -235,7 +627,7 @@ struct CanIAffordSheet: View {
         }
     }
 
-    // MARK: - Logic
+    // MARK: - Logic (NEMODIFICAT)
 
     private var amountValue: Int {
         Int(amountText) ?? 0
