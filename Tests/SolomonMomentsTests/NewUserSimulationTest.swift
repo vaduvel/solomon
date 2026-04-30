@@ -180,7 +180,8 @@ struct NewUserSimulationTest {
             if let tx = BankNotificationParser.parse(raw: raw) {
                 let dir = tx.direction == .incoming ? "⬇ IN " : "⬆ OUT"
                 let merchant = tx.merchant ?? "—"
-                print("\(dir)  \(String(format: "%6.0f", tx.amount.amount)) RON  │  \(merchant)  │  \(tx.category.rawValue)")
+                let amountStr = String(format: "%5d", tx.amount.amount)   // amount e Int
+                print("\(dir)  \(amountStr) RON  │  \(merchant.padding(toLength: 14, withPad: " ", startingAt: 0))│  \(tx.category.rawValue)")
                 parsed += 1
             } else {
                 print("❌  Nu parsat: \"\(raw)\"")
@@ -338,6 +339,144 @@ struct NewUserSimulationTest {
         }
     }
 
+    // ── 6b. WOW MOMENT (forțat — primul raport după onboarding) ─────────
+
+    @Test("✨ Wow Moment — primul raport pentru Daniel")
+    @MainActor func testWowMoment() async throws {
+        let engine = MomentEngine(llm: TemplateLLMProvider())
+        let snapshot = MomentEngine.Snapshot(
+            userProfile: danielProfile,
+            transactions: buildTransactions(),
+            obligations: obligations,
+            subscriptions: subscriptions,
+            goals: goals,
+            referenceDate: today
+        )
+        let output = try await engine.generateWowMoment(snapshot: snapshot)
+
+        print("\n══════════════════════════════════════════════════")
+        print("✨  WOW MOMENT — primul raport pentru Daniel:")
+        print("══════════════════════════════════════════════════")
+        print(output.llmResponse)
+        print("══════════════════════════════════════════════════")
+
+        // Verificăm că răspunsul conține cifrele reale ale lui Daniel
+        #expect(output.llmResponse.contains("5800") || output.llmResponse.contains("5.800"))
+        #expect(output.llmResponse.contains("38") && output.llmResponse.contains("fantomă"))
+    }
+
+    // ── 6c. CAN I AFFORD — pizza pe Glovo ────────────────────────────────
+
+    @Test("🍕 Pot să comand pizza? (89 RON Glovo)")
+    func testCanIAfford() async throws {
+        let template = TemplateLLMProvider()
+        let ctx = CanIAffordContext(
+            user: MomentUser(name: "Daniel", addressing: .tu, ageRange: .range25to35),
+            query: CanIAffordQuery(
+                rawText: "Pot să comand pizza de la Glovo?",
+                amountRequested: Money(89),
+                categoryInferred: .foodDelivery,
+                merchantInferred: "Glovo"
+            ),
+            context: CanIAffordContextBlock(
+                today: today,
+                daysUntilPayday: 29,
+                currentBalance: Money(5_457),
+                obligationsRemainingThisPeriod: [
+                    AffordObligationRef(name: "Chirie", amount: Money(2_200), dueDate: daysFromNow(1))
+                ],
+                obligationsTotalRemaining: Money(2_450),
+                availableAfterObligations: Money(3_007),
+                availablePerDayAfter: Money(103),
+                availablePerDayAfterPurchase: Money(100)
+            ),
+            decision: CanIAffordDecision(
+                verdict: .yes,
+                verdictReason: .comfortableMargin,
+                mathVisible: "după pizza, ai 2.918 RON / 29 zile = 100 RON/zi",
+                alternativeToSuggest: .none
+            ),
+            userHistoryContext: CanIAffordHistoryContext(
+                thisCategoryThisMonth: Money(130),
+                thisCategoryAvgMonthly: Money(322),
+                isAboveAverageToday: false
+            )
+        )
+
+        let json = try JSONContextBuilder().build(ctx)
+        let response = try await template.generate(
+            systemPrompt: "Ești Solomon. Răspunde în română, max 60 cuvinte.",
+            userContext: json,
+            maxWords: 60
+        )
+
+        print("\n══════════════════════════════════════════════════")
+        print("🍕  POT SĂ COMAND PIZZA? (89 RON Glovo)")
+        print("══════════════════════════════════════════════════")
+        print("Întrebare: \"Pot să comand pizza de la Glovo?\"")
+        print("─────────────────────────────────────────────────")
+        print("Solomon: \(response)")
+        print("══════════════════════════════════════════════════")
+
+        // Nu mai trebuie să apară textul brut al întrebării
+        #expect(!response.contains("Pot să comand pizza de la Glovo?"))
+        #expect(response.contains("Glovo") || response.contains("89"))
+    }
+
+    // ── 6d. CAN I AFFORD — verdict NO (test reason path) ─────────────────
+
+    @Test("🚫 Nu pot — bicicletă 1500 RON cu chirie scadentă")
+    func testCanIAffordNo() async throws {
+        let template = TemplateLLMProvider()
+        let ctx = CanIAffordContext(
+            user: MomentUser(name: "Daniel", addressing: .tu, ageRange: .range25to35),
+            query: CanIAffordQuery(
+                rawText: "Pot să iau o bicicletă de la Decathlon?",
+                amountRequested: Money(1_500),
+                categoryInferred: .shoppingOffline,
+                merchantInferred: "Decathlon"
+            ),
+            context: CanIAffordContextBlock(
+                today: today,
+                daysUntilPayday: 29,
+                currentBalance: Money(2_500),
+                obligationsRemainingThisPeriod: [
+                    AffordObligationRef(name: "Chirie", amount: Money(2_200), dueDate: daysFromNow(1))
+                ],
+                obligationsTotalRemaining: Money(2_450),
+                availableAfterObligations: Money(50),
+                availablePerDayAfter: Money(2),
+                availablePerDayAfterPurchase: Money(-50)
+            ),
+            decision: CanIAffordDecision(
+                verdict: .no,
+                verdictReason: .wouldBreakObligation,
+                mathVisible: "după bicicletă: -1.450 RON până la salariu",
+                alternativeToSuggest: .waitUntilPayday
+            ),
+            userHistoryContext: CanIAffordHistoryContext(
+                thisCategoryThisMonth: Money(0),
+                thisCategoryAvgMonthly: Money(150),
+                isAboveAverageToday: true
+            )
+        )
+
+        let json = try JSONContextBuilder().build(ctx)
+        let response = try await template.generate(
+            systemPrompt: "Ești Solomon. Max 60 cuvinte, română.",
+            userContext: json,
+            maxWords: 60
+        )
+        print("\n══════════════════════════════════════════════════")
+        print("🚫  POT IA BICICLETĂ DECATHLON? (1500 RON)")
+        print("══════════════════════════════════════════════════")
+        print("Solomon: \(response)")
+        print("══════════════════════════════════════════════════")
+
+        #expect(response.lowercased().contains("nu"))
+        #expect(response.contains("1500") || response.contains("Decathlon"))
+    }
+
     // ── 7. FLUX COMPLET: NOTIFICARE ING → MOMENT ─────────────────────────
 
     @Test("📲 Flux complet: notificare ING salariu → moment Solomon")
@@ -355,7 +494,7 @@ struct NewUserSimulationTest {
         print("📲  FLUX COMPLET: ING → Solomon")
         print("══════════════════════════════════════════════════")
         print("1️⃣  Notificare ING: \"\(rawNotif)\"")
-        print("   Parser → \(salaryTx.direction.rawValue) \(salaryTx.amount.amount) RON, merchant: \(salaryTx.merchant ?? "?")")
+        print("   Parser → \(salaryTx.direction.rawValue) \(salaryTx.amount.amount) RON, sursa: \(salaryTx.source.rawValue)")
 
         // 2. Snapshot cu tranzacția nouă
         var allTxs = buildTransactions()

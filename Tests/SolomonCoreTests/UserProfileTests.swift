@@ -79,9 +79,10 @@ import Foundation
 
 @Suite struct BankTests {
 
-    @Test func sixteenBanksDeclared() {
-        // 15 bănci RO din spec §8.1 + cazul `.other`.
-        #expect(Bank.allCases.count == 16)
+    @Test func banksDeclared() {
+        // 16 bănci RO din spec §8.1 (incl. Idea) + cazul `.other`.
+        // Sincronizat cu enum Bank — actualizează când adaugi/scoți bănci.
+        #expect(Bank.allCases.count == 17)
     }
 
     @Test func everyBankHasDisplayName() {

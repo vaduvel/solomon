@@ -63,10 +63,15 @@ public final class TemplateLLMProvider: LLMProvider, @unchecked Sendable {
         let income = ctx["income"] as? [String: Any]
         let monthlyAvg = (income?["monthly_avg"] as? Int) ?? 0
         let spending = ctx["spending"] as? [String: Any]
-        let totalLast30 = (spending?["total_last_30_days"] as? Int) ?? 0
-        let positives = ctx["positives"] as? [String]
-        let ghostSubs = ctx["ghost_subscriptions"] as? [[String: Any]] ?? []
-        let ghostSavings = ghostSubs.reduce(0) { $0 + ((($1["amount_monthly"]) as? Int) ?? 0) }
+        // WowSpending are doar monthlyAvg (cheltuieli medii lunare). Nu există total_last_30_days.
+        let monthlySpending = (spending?["monthly_avg"] as? Int) ?? 0
+        // ghost_subscriptions e un BLOC (count + monthly_total + items), nu array direct
+        let ghostBlock = ctx["ghost_subscriptions"] as? [String: Any]
+        let ghostCount = (ghostBlock?["count"] as? Int) ?? 0
+        let ghostSavings = (ghostBlock?["monthly_total"] as? Int) ?? 0
+        // positives e [{type, description, ...}], nu [String]
+        let positivesArr = ctx["positives"] as? [[String: Any]] ?? []
+        let positivesText = positivesArr.compactMap { $0["description"] as? String }.prefix(2)
 
         let salut = greeting(formal: formal)
         var lines: [String] = []
@@ -75,16 +80,15 @@ public final class TemplateLLMProvider: LLMProvider, @unchecked Sendable {
         if monthlyAvg > 0 {
             lines.append("În medie ai \(monthlyAvg) RON pe lună din salariu.")
         }
-        if totalLast30 > 0 {
-            lines.append("În ultimele 30 zile ai cheltuit \(totalLast30) RON.")
+        if monthlySpending > 0 {
+            lines.append("Cheltuieli medii: \(monthlySpending) RON pe lună.")
         }
-        if ghostSavings > 0 {
-            let count = ghostSubs.count
-            let plural = count == 1 ? "abonament fantomă" : "abonamente fantomă"
-            lines.append("Am găsit \(count) \(plural) — economisești \(ghostSavings) RON/lună dacă le anulezi.")
+        if ghostCount > 0 && ghostSavings > 0 {
+            let plural = ghostCount == 1 ? "abonament fantomă" : "abonamente fantomă"
+            lines.append("Am găsit \(ghostCount) \(plural) — economisești \(ghostSavings) RON/lună dacă le anulezi.")
         }
-        if let positives = positives?.prefix(2), !positives.isEmpty {
-            lines.append("Ce mergi bine: " + positives.joined(separator: "; ") + ".")
+        if !positivesText.isEmpty {
+            lines.append("Ce mergi bine: " + positivesText.joined(separator: "; ") + ".")
         }
         return lines.joined(separator: " ")
     }
@@ -94,7 +98,10 @@ public final class TemplateLLMProvider: LLMProvider, @unchecked Sendable {
     private func renderCanIAfford(_ ctx: [String: Any], name: String, formal: Bool) -> String {
         let query = ctx["query"] as? [String: Any]
         let amount = (query?["amount_requested"] as? Int) ?? 0
-        let item = (query?["raw_text"] as? String) ?? "achiziția"
+        // Preferăm merchantInferred peste rawText (textul întrebării completă)
+        let merchant = query?["merchant_inferred"] as? String
+        let category = (query?["category_inferred"] as? String)?.replacingOccurrences(of: "_", with: " ")
+        let item = merchant ?? category ?? "achiziția"
         let decision = ctx["decision"] as? [String: Any]
         let verdict = (decision?["verdict"] as? String) ?? "uncertain"
         let mathVisible = decision?["math_visible"] as? String
@@ -102,14 +109,16 @@ public final class TemplateLLMProvider: LLMProvider, @unchecked Sendable {
         switch verdict {
         case "yes":
             if let math = mathVisible {
-                return "Da, \(name), poți cumpăra \(item) (\(amount) RON). \(math)."
+                return "Da, \(name), poți cumpăra de la \(item) (\(amount) RON). \(math)."
             }
-            return "Da, \(name), poți cumpăra \(item) (\(amount) RON) — încadrezi confortabil."
+            return "Da, \(name), poți cumpăra de la \(item) (\(amount) RON) — încadrezi confortabil."
         case "tight":
-            return "\(name), e strâns. \(amount) RON pentru \(item) îți lasă puțin până la salariu."
+            return "\(name), e strâns. \(amount) RON la \(item) îți lasă puțin până la salariu."
         case "no":
-            let reason = (decision?["reason_short"] as? String) ?? "ar afecta obligațiile"
-            return "Nu, \(name). \(amount) RON pentru \(item) \(reason)."
+            // Traducem verdictReason în română (cazuri din CanIAffordVerdictReason enum)
+            let reasonRaw = (decision?["verdict_reason"] as? String) ?? ""
+            let reason = translateVerdictReason(reasonRaw)
+            return "Nu, \(name). \(amount) RON la \(item) — \(reason)."
         default:
             return "Verific contul tău pentru \(item)..."
         }
@@ -165,13 +174,17 @@ public final class TemplateLLMProvider: LLMProvider, @unchecked Sendable {
     private func renderPatternAlert(_ ctx: [String: Any], name: String, formal: Bool) -> String {
         let pattern = ctx["pattern_detected"] as? [String: Any]
         let category = (pattern?["category"] as? String) ?? "cheltuieli"
-        let percentage = (pattern?["percentage_of_total"] as? Int) ?? 0
-        let amount = (pattern?["amount_total"] as? Int) ?? 0
+        // Câmpurile reale: amountPeriod (suma observată) + vsBudgetPct (% peste medie)
+        let amount = (pattern?["amount_period"] as? Int) ?? 0
+        let vsBudgetPct = (pattern?["vs_budget_pct"] as? Int) ?? 0
+        let projected = (pattern?["amount_projected_monthly"] as? Int) ?? 0
 
-        let verb = formal ? "reprezintă" : "reprezintă"
         let pron = formal ? "dumneavoastră" : "tale"
-        if percentage > 0 && amount > 0 {
-            return "\(name), \(category) \(verb) \(percentage)% din cheltuielile \(pron) (\(amount) RON). Media obișnuită e mai mică."
+        if amount > 0 && vsBudgetPct > 0 {
+            return "\(name), \(category) — \(amount) RON observate, +\(vsBudgetPct)% peste media \(pron) lunară. La ritmul ăsta, \(projected) RON până la sfârșitul lunii."
+        }
+        if amount > 0 {
+            return "\(name), \(category): \(amount) RON în perioada observată. Solomon urmărește tiparul."
         }
         return "\(name), Solomon a observat un tipar nou la \(category)."
     }
@@ -179,19 +192,26 @@ public final class TemplateLLMProvider: LLMProvider, @unchecked Sendable {
     // MARK: - Subscription Audit
 
     private func renderSubscriptionAudit(_ ctx: [String: Any], name: String, formal: Bool) -> String {
+        // SubscriptionAuditTotals are monthlyRecoverable + annualRecoverable + contextComparison
         let totals = ctx["totals"] as? [String: Any]
-        let monthly = (totals?["total_monthly"] as? Int) ?? 0
+        let monthlyRecover = (totals?["monthly_recoverable"] as? Int) ?? 0
+        let annualRecover = (totals?["annual_recoverable"] as? Int) ?? 0
+        // ghost_subscriptions e array [{name, amount_monthly, ...}]
         let ghosts = ctx["ghost_subscriptions"] as? [[String: Any]] ?? []
-        let savings = ghosts.reduce(0) { $0 + ((($1["amount_monthly"]) as? Int) ?? 0) }
+        // Fallback: dacă totals lipsesc, calculăm din ghost items
+        let savings = monthlyRecover > 0
+            ? monthlyRecover
+            : ghosts.reduce(0) { $0 + ((($1["amount_monthly"]) as? Int) ?? 0) }
+        let savingsAnnual = annualRecover > 0 ? annualRecover : savings * 12
 
         let pron = formal ? "dumneavoastră" : "tale"
         let verb = formal ? "Anulați-le" : "Anulează-le"
         if ghosts.isEmpty {
-            return "\(name), abonamentele \(pron) sunt în regulă — \(monthly) RON/lună, toate folosite."
+            return "\(name), abonamentele \(pron) sunt în regulă — toate folosite recent."
         }
         let plural = ghosts.count == 1 ? "abonament fantomă" : "abonamente fantomă"
         let consum = formal ? "vă consumă" : "îți consumă"
-        return "\(name), \(ghosts.count) \(plural) \(consum) \(savings) RON/lună. \(verb) și economisiți \(savings * 12) RON pe an."
+        return "\(name), \(ghosts.count) \(plural) \(consum) \(savings) RON/lună. \(verb) și economisiți \(savingsAnnual) RON pe an."
     }
 
     // MARK: - Spiral Alert
@@ -221,18 +241,38 @@ public final class TemplateLLMProvider: LLMProvider, @unchecked Sendable {
     private func renderWeeklySummary(_ ctx: [String: Any], name: String, formal: Bool) -> String {
         let spending = ctx["spending"] as? [String: Any]
         let total = (spending?["total"] as? Int) ?? 0
+        let diffPct = (spending?["diff_pct"] as? Int) ?? 0
+        // SmallWin are exists + description (nu text)
         let smallWin = ctx["small_win"] as? [String: Any]
-        let winText = (smallWin?["text"] as? String)
+        let winExists = (smallWin?["exists"] as? Bool) ?? false
+        let winText = smallWin?["description"] as? String
 
         let verb = formal ? "ați cheltuit" : "ai cheltuit"
         var msg = "\(name), săptămâna asta \(verb) \(total) RON."
-        if let winText, !winText.isEmpty {
-            msg += " \(winText)"
+        if diffPct != 0 {
+            let dir = diffPct > 0 ? "peste" : "sub"
+            msg += " Asta e \(abs(diffPct))% \(dir) media săptămânală."
+        }
+        if winExists, let w = winText, !w.isEmpty {
+            msg += " 🎉 \(w)"
         }
         return msg
     }
 
     // MARK: - Helpers
+
+    /// Traduce raw verdict reason (snake_case enum) în RO natural.
+    private func translateVerdictReason(_ raw: String) -> String {
+        switch raw {
+        case "comfortable_margin":     return "ai marjă confortabilă"
+        case "tight_but_workable":     return "e strâns dar se poate"
+        case "would_create_overdraft": return "ai intra pe minus"
+        case "would_break_obligation": return "ar pune în pericol o plată obligatorie"
+        case "category_already_over":  return "ai depășit deja media la categoria asta"
+        default:
+            return raw.isEmpty ? "ar afecta obligațiile" : raw.replacingOccurrences(of: "_", with: " ")
+        }
+    }
 
     private func greeting(formal: Bool) -> String {
         let hour = Calendar.current.component(.hour, from: Date())
