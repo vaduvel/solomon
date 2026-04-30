@@ -67,7 +67,7 @@ struct OnboardingContainerView: View {
         .onDisappear {
             didAppear = false
         }
-        .onChange(of: state.currentStep) { newStep in
+        .onChange(of: state.currentStep) { _, newStep in
             if !reduceMotion {
                 dotsPulse = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
